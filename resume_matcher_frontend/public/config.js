@@ -1,7 +1,7 @@
 <script>
-  // Runtime configuration for Resume Match Optimizer (no env vars; loaded at runtime).
-  // IMPORTANT: Use a fully qualified URL with protocol and no trailing slash.
+  // Runtime configuration for the frontend.
+  // Note: Use a fully qualified URL, no trailing slash, and do not include path segments like /api/health.
   window._CONFIG = {
-    API_BASE_URL: "https://your-tunnel-domain.ngrok.app"
+    API_BASE_URL: "https://FastAPIHealthMonitor.23wh1a0558.repl.co"
   };
 </script>
