@@ -136,7 +136,33 @@ How to verify API base URL:
 - Tests live in src/App.test.js and mock src/api/client.js to avoid network calls.
 - Run with npm test. In CI environments, ensure tests run in non-interactive mode.
 
-## Notes
+## Backend Setup
 
-- No environment variables are used or required. Configure the target backend via public/config.js only.
-- The UI follows the Ocean Professional theme: modern, responsive, clean design with subtle shadows and rounded corners.
+To run the frontend against the local AI Backend API:
+
+1) Start the backend on port 8000
+   - From the ai_backend_api directory:
+     - Create and activate a venv, then install deps:
+       python -m venv .venv
+       source .venv/bin/activate
+       pip install fastapi "uvicorn[standard]" pydantic pytest httpx
+     - Run the dev server:
+       uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   - API should be available at http://localhost:8000 (OpenAPI docs at /docs)
+
+2) Point the frontend to the backend via public/config.js
+   - Create or edit public/config.js with:
+     <script>
+       window._CONFIG = { API_BASE_URL: "http://localhost:8000" };
+     </script>
+   - Use a fully qualified URL and do not include a trailing slash.
+
+3) Verify configuration in the app
+   - Start the frontend (npm start) and navigate to /settings
+   - Confirm the resolved API Base URL shows http://localhost:8000
+
+CORS tips:
+- Ensure the backend allows the frontend origin http://localhost:3000
+- Allowed methods should include GET, POST, OPTIONS
+- Allowed headers typically include Content-Type, Accept, Authorization (if used)
+- Handle OPTIONS preflight requests; FastAPI CORSMiddleware is already configured to expose X-Request-ID
