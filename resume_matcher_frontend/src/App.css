@@ -167,6 +167,24 @@
   background: rgba(37, 99, 235, 0.06);
 }
 
+/* Outline button used in settings/actions */
+.btn.btn-outline {
+  background: #fff;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-base), transform var(--transition-fast), box-shadow var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+.btn.btn-outline:hover,
+.btn.btn-outline:focus {
+  background: var(--color-subtle);
+  box-shadow: var(--shadow-md);
+}
+
 /* Skeleton shimmer animation and utilities */
 @keyframes skeleton-shimmer {
   0% { background-position: -200% 0; }

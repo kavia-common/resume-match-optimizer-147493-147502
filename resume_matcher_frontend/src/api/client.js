@@ -4,6 +4,7 @@
 //
 
 import { getApiBaseUrl } from '../constants/config';
+import { setLastError } from './errorStore';
 
 /**
  * Standardized error shape returned by this client.
@@ -159,6 +160,17 @@ export async function request(path, options = {}) {
         });
       } catch (_) {}
 
+      // Capture last error for diagnostics
+      try {
+        setLastError({
+          code: 'HTTP_ERROR',
+          message: serverMessage,
+          status: response.status,
+          url,
+          method: (rest && rest.method) || 'GET',
+          details: parsed,
+        });
+      } catch (_) {}
       throw createError('HTTP_ERROR', serverMessage, response.status, parsed);
     }
 
@@ -202,6 +214,16 @@ export async function request(path, options = {}) {
         method: (options && options.method) || 'GET',
         code: 'NETWORK_ERROR',
         message,
+      });
+    } catch (_) {}
+    try {
+      setLastError({
+        code: 'NETWORK_ERROR',
+        message,
+        url: (() => {
+          try { return new URL(path, baseUrl).toString(); } catch { return String(path); }
+        })(),
+        method: (options && options.method) || 'GET',
       });
     } catch (_) {}
     throw createError('NETWORK_ERROR', message);

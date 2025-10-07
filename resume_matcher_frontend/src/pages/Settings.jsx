@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Container from '../components/Layout/Container';
 import { getApiBaseUrl } from '../constants/config';
-import { apiUrl } from '../api/endpoints';
+import { apiUrl, endpoints } from '../api/endpoints';
 import { clearDrafts } from '../utils/storage';
+import { getLastError, subscribe } from '../api/errorStore';
+import { get, postJson } from '../api/client';
 
 // PUBLIC_INTERFACE
 export default function Settings() {
@@ -32,6 +34,123 @@ export default function Settings() {
 
   const [clearMessage, setClearMessage] = useState('');
 
+  // Diagnostics state
+  const [health, setHealth] = useState({ status: 'idle', lastCheckedAt: null, details: null });
+  const [lastErr, setLastErr] = useState(() => getLastError());
+  const [diagRunning, setDiagRunning] = useState(false);
+  const [diagResults, setDiagResults] = useState({
+    health: null,
+    matchTest: null,
+  });
+
+  // Subscribe to last error updates
+  useEffect(() => {
+    const unsub = subscribe((err) => setLastErr(err));
+    return () => { try { unsub(); } catch (_) {} };
+  }, []);
+
+  // Helpers to classify likely issue
+  const errorHint = useMemo(() => {
+    if (!lastErr) return null;
+    const msg = String(lastErr.message || '').toLowerCase();
+    if (msg.includes('cors') || msg.includes('preflight') || msg.includes('access-control-allow-origin')) {
+      return 'Hint: This looks like a CORS issue. Ensure the backend allows this frontend origin and handles OPTIONS.';
+    }
+    if (msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('network error')) {
+      return 'Hint: Likely a network/connectivity issue. Verify API_BASE_URL, backend is reachable, and schemes (http/https) match.';
+    }
+    if (msg.includes('timeout')) {
+      return 'Hint: Backend may be slow or unreachable. Check server status and increase timeouts if necessary.';
+    }
+    return null;
+  }, [lastErr]);
+
+  // Run health check
+  const runHealthCheck = async () => {
+    setHealth({ status: 'checking', lastCheckedAt: null, details: null });
+    try {
+      const { data, status } = await get('/api/health', undefined, { timeout: 8000 });
+      setHealth({ status: status === 200 ? 'ok' : 'fail', lastCheckedAt: Date.now(), details: { data, status } });
+    } catch (e) {
+      setHealth({ status: 'fail', lastCheckedAt: Date.now(), details: e });
+    }
+  };
+
+  // Run full diagnostics
+  const runDiagnostics = async () => {
+    setDiagRunning(true);
+    const results = { health: null, matchTest: null, meta: {
+      apiBaseUrl: apiBase,
+      endpoints: {
+        analyze: endpoints.resumesAnalyze(),
+        match: endpoints.jobsMatch(),
+        suggest: endpoints.jobsSuggest(),
+        health: apiUrl('/api/health'),
+      },
+      ts: Date.now(),
+      origin: typeof window !== 'undefined' ? window.location.origin : 'n/a',
+    } };
+
+    // Health GET
+    try {
+      const { status } = await get('/api/health', undefined, { timeout: 8000 });
+      results.health = { ok: status === 200, status, statusText: status === 200 ? 'OK' : 'Non-200', url: apiUrl('/api/health'), method: 'GET' };
+    } catch (e) {
+      results.health = {
+        ok: false,
+        status: e?.status ?? 0,
+        statusText: e?.message || 'Error',
+        url: apiUrl('/api/health'),
+        method: 'GET',
+        code: e?.code,
+      };
+    }
+
+    // Minimal match POST (backend should validate; we only test connectivity + status)
+    const minimalMatchBody = { resumeId: 'diag', jobIds: [] };
+    try {
+      const { status } = await postJson('/api/jobs/match', minimalMatchBody, { timeout: 8000 });
+      results.matchTest = { ok: status >= 200 && status < 300, status, statusText: 'OK', url: endpoints.jobsMatch(), method: 'POST' };
+    } catch (e) {
+      results.matchTest = {
+        ok: false,
+        status: e?.status ?? 0,
+        statusText: e?.message || 'Error',
+        url: endpoints.jobsMatch(),
+        method: 'POST',
+        code: e?.code,
+      };
+    }
+
+    setDiagResults(results);
+    setDiagRunning(false);
+  };
+
+  const copyDiagnostics = async () => {
+    try {
+      const payload = {
+        meta: {
+          apiBaseUrl: apiBase,
+          origin: typeof window !== 'undefined' ? window.location.origin : 'n/a',
+          ts: Date.now(),
+        },
+        endpoints: {
+          analyze: endpoints.resumesAnalyze(),
+          match: endpoints.jobsMatch(),
+          suggest: endpoints.jobsSuggest(),
+          health: apiUrl('/api/health'),
+        },
+        health,
+        lastError: lastErr,
+        runResults: diagResults,
+      };
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      alert('Diagnostics copied to clipboard.');
+    } catch {
+      alert('Failed to copy diagnostics.');
+    }
+  };
+
   return (
     <Container as="section" role="region" ariaLabel="Settings">
       <div className="panel">
@@ -39,6 +158,121 @@ export default function Settings() {
           <h2 style={{ margin: 0 }}>Settings</h2>
           <p className="description">View runtime configuration and adjust preferences.</p>
         </header>
+
+        {/* Diagnostics */}
+        <div className="card" aria-label="Connectivity diagnostics">
+          <h3 style={{ marginTop: 0 }}>Connectivity Diagnostics</h3>
+          <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+            <div>
+              <div style={{ color: 'var(--color-text-muted)' }}>Resolved endpoints</div>
+              <div className="card" style={{ marginTop: 8 }}>
+                <div>API Base URL:</div>
+                <code style={{ display: 'block', marginTop: 4 }}>{apiBase}</code>
+                <div style={{ marginTop: 8 }}>Analyze (POST):</div>
+                <code style={{ display: 'block', marginTop: 4 }}>{endpoints.resumesAnalyze()}</code>
+                <div style={{ marginTop: 8 }}>Match (POST):</div>
+                <code style={{ display: 'block', marginTop: 4 }}>{endpoints.jobsMatch()}</code>
+                <div style={{ marginTop: 8 }}>Suggest (GET/POST path):</div>
+                <code style={{ display: 'block', marginTop: 4 }}>{endpoints.jobsSuggest()}</code>
+                <div style={{ marginTop: 8 }}>Health (GET):</div>
+                <code style={{ display: 'block', marginTop: 4 }}>{apiUrl('/api/health')}</code>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ color: 'var(--color-text-muted)' }}>Quick health check</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                <button type="button" className="btn btn-outline" onClick={runHealthCheck} aria-label="Run health check">
+                  {health.status === 'checking' ? 'Checking…' : 'Check health'}
+                </button>
+                {health.status !== 'idle' && (
+                  <span aria-live="polite" style={{ fontSize: 14 }}>
+                    Status:{' '}
+                    <strong style={{ color: health.status === 'ok' ? 'var(--color-primary)' : 'var(--color-error)' }}>
+                      {health.status === 'ok' ? 'OK' : 'Fail'}
+                    </strong>
+                    {health.lastCheckedAt && (
+                      <span style={{ marginLeft: 8, color: 'var(--color-text-muted)' }}>
+                        at {new Date(health.lastCheckedAt).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </span>
+                )}
+                <a href={apiUrl('/api/health')} target="_blank" rel="noreferrer" style={{ marginLeft: 'auto' }}>
+                  Open /api/health
+                </a>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ color: 'var(--color-text-muted)' }}>Last network/API error</div>
+              {!lastErr ? (
+                <div className="card" style={{ marginTop: 8 }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>No errors captured yet.</span>
+                </div>
+              ) : (
+                <div className="card" style={{ marginTop: 8 }}>
+                  <div style={{ display: 'grid', gap: 4 }}>
+                    <div><strong>Code:</strong> {lastErr.code}</div>
+                    <div><strong>Message:</strong> {lastErr.message}</div>
+                    {lastErr.status !== undefined && <div><strong>Status:</strong> {lastErr.status}</div>}
+                    {lastErr.method && <div><strong>Method:</strong> {lastErr.method}</div>}
+                    {lastErr.url && <div><strong>URL:</strong> <code>{lastErr.url}</code></div>}
+                    {lastErr.ts && (
+                      <div><strong>When:</strong> {new Date(lastErr.ts).toLocaleString()}</div>
+                    )}
+                    {errorHint && (
+                      <div role="note" style={{ color: 'var(--color-text-muted)', marginTop: 6 }}>
+                        {errorHint}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div style={{ color: 'var(--color-text-muted)' }}>Full diagnostics</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={runDiagnostics}
+                  disabled={diagRunning}
+                  aria-label="Run diagnostics"
+                >
+                  {diagRunning ? 'Running…' : 'Run diagnostics'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={copyDiagnostics}
+                  aria-label="Copy diagnostics JSON"
+                  title="Copy diagnostics JSON"
+                >
+                  Copy as JSON
+                </button>
+              </div>
+              <div className="card" style={{ marginTop: 8, padding: 12 }}>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                  <code>
+                    {JSON.stringify(
+                      {
+                        meta: {
+                          apiBaseUrl: apiBase,
+                          origin: typeof window !== 'undefined' ? window.location.origin : 'n/a',
+                        },
+                        results: diagResults,
+                      },
+                      null,
+                      2
+                    )}
+                  </code>
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="card" aria-label="Runtime configuration">
           <h3 style={{ marginTop: 0 }}>Runtime Configuration</h3>
