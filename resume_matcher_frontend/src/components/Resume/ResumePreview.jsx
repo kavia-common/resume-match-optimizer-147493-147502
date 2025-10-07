@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { computeWordCount, estimateReadability, countKeywordFrequency, highlightKeywordsHtml } from '../../utils/text';
+import { exportJSON, copyToClipboard } from '../../utils/export';
 
 /**
  * PUBLIC_INTERFACE
@@ -20,6 +21,8 @@ import { computeWordCount, estimateReadability, countKeywordFrequency, highlight
  * - localKeywords?: string[] (optional) - seed keywords to highlight/analyze locally (fallbacks to data.keywords)
  */
 export default function ResumePreview({ data, onApplySuggestion, localText = '', localKeywords = undefined }) {
+  const [selectedSuggestionText, setSelectedSuggestionText] = useState('');
+
   // Normalize presence of local text first (do not early-return before hooks)
   const hasLocal = typeof localText === 'string' && localText.trim().length > 0;
 
@@ -36,6 +39,21 @@ export default function ResumePreview({ data, onApplySuggestion, localText = '',
     const base = Array.isArray(localKeywords) && localKeywords.length > 0 ? localKeywords : keywords;
     return (Array.isArray(base) ? base : []).filter((k) => String(k || '').trim().length > 0);
   }, [localKeywords, keywords]);
+
+  // Prepare export payload memoized (client-only, no backend)
+  const analysisPayload = useMemo(
+    () => ({
+      extractedText: extractedText || '',
+      atsScore: typeof atsScore === 'number' ? atsScore : null,
+      keywords: Array.isArray(displayKeywords) ? displayKeywords : [],
+      suggestions: Array.isArray(suggestions)
+        ? suggestions.map((s) => (typeof s === 'string' ? { title: s } : s))
+        : [],
+      exportedAt: new Date().toISOString(),
+      source: 'ResumePreview',
+    }),
+    [extractedText, atsScore, displayKeywords, suggestions]
+  );
 
   // Compute local-only insights when localText is present (never calls backend)
   const localInsights = useMemo(() => {
@@ -55,10 +73,43 @@ export default function ResumePreview({ data, onApplySuggestion, localText = '',
   // After hooks, we may render a minimal empty state if both backend data and local text are missing
   const showEmpty = !data && !hasLocal;
 
+  const handleCopyAllSuggestions = async () => {
+    const list = Array.isArray(suggestions) ? suggestions : [];
+    const normalized = list.map((s) => (typeof s === 'string' ? s : [s?.title, s?.detail].filter(Boolean).join(' - ')));
+    await copyToClipboard(normalized.join('\n'));
+  };
+
+  const handleCopySelectedSuggestion = async () => {
+    if (!selectedSuggestionText) return;
+    await copyToClipboard(selectedSuggestionText);
+  };
+
   if (showEmpty) {
     return (
       <section className="panel" aria-label="Resume analysis preview">
-        <h3 style={{ marginTop: 0 }}>Analysis Preview</h3>
+        <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Analysis Preview</h3>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn"
+              aria-label="Export resume analysis as JSON"
+              title="Export analysis JSON"
+              onClick={() => exportJSON('resume-analysis.json', analysisPayload)}
+            >
+              Export JSON
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              aria-label="Copy all suggestions to clipboard"
+              title="Copy all suggestions"
+              onClick={handleCopyAllSuggestions}
+            >
+              Copy Suggestions
+            </button>
+          </div>
+        </div>
         <p className="description">No analysis yet. Upload or paste a resume to get started.</p>
       </section>
     );
@@ -66,21 +117,44 @@ export default function ResumePreview({ data, onApplySuggestion, localText = '',
 
   return (
     <section className="panel" aria-label="Resume analysis preview">
-      <header style={{ marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Analysis Preview</h3>
-        {typeof atsScore === 'number' && (
-          <div
-            role="status"
-            aria-label={`ATS score ${atsScore} out of 100`}
-            style={{
-              marginTop: 6,
-              fontWeight: 700,
-              color: 'var(--color-primary)',
-            }}
+      <header className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+        <div>
+          <h3 style={{ marginTop: 0 }}>Analysis Preview</h3>
+          {typeof atsScore === 'number' && (
+            <div
+              role="status"
+              aria-label={`ATS score ${atsScore} out of 100`}
+              style={{
+                marginTop: 6,
+                fontWeight: 700,
+                color: 'var(--color-primary)',
+              }}
+            >
+              ATS Score: {atsScore}/100
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => exportJSON('resume-analysis.json', analysisPayload)}
+            aria-label="Export resume analysis as JSON"
+            title="Export analysis JSON"
           >
-            ATS Score: {atsScore}/100
-          </div>
-        )}
+            Export JSON
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleCopyAllSuggestions}
+            aria-label="Copy all suggestions to clipboard"
+            title="Copy all suggestions"
+          >
+            Copy Suggestions
+          </button>
+        </div>
       </header>
 
       {/* Keywords */}
@@ -121,31 +195,57 @@ export default function ResumePreview({ data, onApplySuggestion, localText = '',
 
       {/* Suggestions */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <h4 style={{ marginTop: 0 }}>Suggestions</h4>
+        <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+          <h4 style={{ marginTop: 0 }}>Suggestions</h4>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={handleCopySelectedSuggestion}
+            aria-label="Copy selected suggestion to clipboard"
+            title="Copy selected suggestion"
+            disabled={!selectedSuggestionText}
+          >
+            Copy Selected
+          </button>
+        </div>
         {Array.isArray(suggestions) && suggestions.length > 0 ? (
           <ul aria-label="Suggestions list" style={{ paddingLeft: 18 }}>
-            {suggestions.map((sug, idx) => (
-              <li key={sug.id ?? idx} style={{ marginBottom: 10 }}>
-                <div style={{ fontWeight: 600 }}>{sug.title}</div>
-                {sug.detail && (
-                  <div style={{ color: 'var(--color-text-muted)', marginTop: 4 }}>
-                    {sug.detail}
-                  </div>
-                )}
-                {onApplySuggestion && (
-                  <div style={{ marginTop: 6 }}>
-                    <button
-                      type="button"
-                      className="btn btn-outline"
-                      onClick={() => onApplySuggestion(sug)}
-                      aria-label={`Apply suggestion: ${sug.title}`}
-                    >
-                      Apply
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
+            {suggestions.map((sug, idx) => {
+              const title = typeof sug === 'string' ? sug : sug?.title;
+              const detail = typeof sug === 'string' ? '' : sug?.detail;
+              const fullText = [title, detail].filter(Boolean).join(' - ');
+              return (
+                <li
+                  key={sug?.id ?? idx}
+                  style={{ marginBottom: 10, cursor: 'text' }}
+                  onMouseUp={() => {
+                    const sel = window.getSelection()?.toString();
+                    setSelectedSuggestionText(sel?.trim() ? sel : fullText);
+                  }}
+                  aria-label={`Suggestion ${idx + 1}`}
+                  title={fullText}
+                >
+                  <div style={{ fontWeight: 600 }}>{title}</div>
+                  {detail && (
+                    <div style={{ color: 'var(--color-text-muted)', marginTop: 4 }}>
+                      {detail}
+                    </div>
+                  )}
+                  {onApplySuggestion && (
+                    <div style={{ marginTop: 6 }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => onApplySuggestion(sug)}
+                        aria-label={`Apply suggestion: ${title}`}
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="description">No suggestions available.</p>

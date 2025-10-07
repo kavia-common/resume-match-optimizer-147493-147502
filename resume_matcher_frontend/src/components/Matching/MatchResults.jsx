@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { exportJSON, copyToClipboard } from '../../utils/export';
 
 /**
  * PUBLIC_INTERFACE
@@ -26,6 +27,8 @@ export default function MatchResults({
   heading = 'Match Results',
   onApplySuggestion,
 }) {
+  const [selectedImprovementText, setSelectedImprovementText] = useState('');
+
   const clampedScore = useMemo(() => {
     if (typeof matchScore !== 'number' || Number.isNaN(matchScore)) return null;
     return Math.max(0, Math.min(100, Math.round(matchScore)));
@@ -38,23 +41,68 @@ export default function MatchResults({
     return 'var(--color-text-muted)';
   }, [clampedScore]);
 
+  const exportPayload = useMemo(
+    () => ({
+      matchScore: clampedScore,
+      highlights: Array.isArray(highlights) ? highlights : [],
+      improvements: Array.isArray(improvements) ? improvements : [],
+      exportedAt: new Date().toISOString(),
+      source: 'MatchResults',
+    }),
+    [clampedScore, highlights, improvements]
+  );
+
+  const handleCopyAllImprovements = async () => {
+    const list = Array.isArray(improvements) ? improvements : [];
+    const normalized = list.map((imp) => [imp?.title, imp?.detail].filter(Boolean).join(' - '));
+    await copyToClipboard(normalized.join('\n'));
+  };
+
+  const handleCopySelectedImprovement = async () => {
+    if (!selectedImprovementText) return;
+    await copyToClipboard(selectedImprovementText);
+  };
+
   return (
     <section className="panel" aria-label="Match results panel">
-      <header style={{ marginBottom: 12 }}>
-        <h3 style={{ margin: 0 }}>{heading}</h3>
-        {clampedScore != null && (
-          <div
-            role="meter"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={clampedScore}
-            aria-label={`Overall match score ${clampedScore} out of 100`}
-            style={{ fontWeight: 700, color: scoreColor, marginTop: 6 }}
-            title={`Match score: ${clampedScore}/100`}
+      <header className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+        <div>
+          <h3 style={{ margin: 0 }}>{heading}</h3>
+          {clampedScore != null && (
+            <div
+              role="meter"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={clampedScore}
+              aria-label={`Overall match score ${clampedScore} out of 100`}
+              style={{ fontWeight: 700, color: scoreColor, marginTop: 6 }}
+              title={`Match score: ${clampedScore}/100`}
+            >
+              Match Score: {clampedScore}/100
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => exportJSON('match-results.json', exportPayload)}
+            aria-label="Export match results as JSON"
+            title="Export results JSON"
           >
-            Match Score: {clampedScore}/100
-          </div>
-        )}
+            Export JSON
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleCopyAllImprovements}
+            aria-label="Copy all improvements to clipboard"
+            title="Copy all improvements"
+          >
+            Copy Improvements
+          </button>
+        </div>
       </header>
 
       {/* Highlights */}
@@ -85,31 +133,57 @@ export default function MatchResults({
 
       {/* Improvements */}
       <div className="card">
-        <h4 style={{ marginTop: 0 }}>Improvements</h4>
+        <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+          <h4 style={{ marginTop: 0 }}>Improvements</h4>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={handleCopySelectedImprovement}
+            aria-label="Copy selected improvement to clipboard"
+            title="Copy selected improvement"
+            disabled={!selectedImprovementText}
+          >
+            Copy Selected
+          </button>
+        </div>
         {Array.isArray(improvements) && improvements.length > 0 ? (
           <ul aria-label="Improvement suggestions" style={{ paddingLeft: 18, margin: 0 }}>
-            {improvements.map((imp, idx) => (
-              <li key={imp.id ?? idx} style={{ marginBottom: 12 }}>
-                <div style={{ fontWeight: 600 }}>{imp.title}</div>
-                {imp.detail && (
-                  <div style={{ color: 'var(--color-text-muted)', marginTop: 4 }}>
-                    {imp.detail}
-                  </div>
-                )}
-                {onApplySuggestion && (
-                  <div style={{ marginTop: 6 }}>
-                    <button
-                      type="button"
-                      className="btn btn-outline"
-                      onClick={() => onApplySuggestion(imp)}
-                      aria-label={`Apply improvement: ${imp.title}`}
-                    >
-                      Apply
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
+            {improvements.map((imp, idx) => {
+              const title = imp?.title ?? '';
+              const detail = imp?.detail ?? '';
+              const fullText = [title, detail].filter(Boolean).join(' - ');
+              return (
+                <li
+                  key={imp.id ?? idx}
+                  style={{ marginBottom: 12, cursor: 'text' }}
+                  onMouseUp={() => {
+                    const sel = window.getSelection()?.toString();
+                    setSelectedImprovementText(sel?.trim() ? sel : fullText);
+                  }}
+                  aria-label={`Improvement ${idx + 1}`}
+                  title={fullText}
+                >
+                  <div style={{ fontWeight: 600 }}>{title}</div>
+                  {detail && (
+                    <div style={{ color: 'var(--color-text-muted)', marginTop: 4 }}>
+                      {detail}
+                    </div>
+                  )}
+                  {onApplySuggestion && (
+                    <div style={{ marginTop: 6 }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => onApplySuggestion(imp)}
+                        aria-label={`Apply improvement: ${title}`}
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="description" style={{ margin: 0 }}>No improvements suggested.</p>
