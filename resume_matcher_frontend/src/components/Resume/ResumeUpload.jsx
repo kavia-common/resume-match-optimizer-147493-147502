@@ -1,13 +1,14 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import useApi from '../../hooks/useApi';
 import { postJson, postMultipart } from '../../api/client';
+import { validateFile, buildFormData } from '../../utils/file';
 
 /**
  * PUBLIC_INTERFACE
  * ResumeUpload - Upload or paste a resume to prepare analysis payloads.
  * - Supports single file upload (PDF/DOCX/TXT) with drag-and-drop
  * - Supports pasting plain text as an alternative
- * - Validates file type and size (temporary inline validator, replace with utils/file.js later)
+ * - Validates file type and size via utils/file.js
  * - Prepares payloads using api/client.js helpers (multipart for file, JSON for text)
  * - Does NOT call backend endpoints yet; triggers onAnalyze callback to parent with prepared values.
  *
@@ -26,36 +27,12 @@ export default function ResumeUpload({ onAnalyze, maxFileSize = 5 * 1024 * 1024 
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Temporary inline validator (to be replaced by utils/file.js in a future step)
-  const validateFile = useCallback(
-    (f) => {
-      if (!f) return { ok: false, reason: 'No file selected.' };
-      const allowed = [
-        'application/pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-        'application/msword', // .doc (allow, though analysis may convert server-side)
-        'text/plain',
-      ];
-      const extOk =
-        allowed.includes(f.type) ||
-        /\.(pdf|docx?|txt)$/i.test(f.name || '');
-      if (!extOk) {
-        return { ok: false, reason: 'Unsupported file type. Please upload PDF, DOC, DOCX, or TXT.' };
-      }
-      if (f.size > maxFileSize) {
-        return { ok: false, reason: `File too large. Maximum size is ${Math.round(maxFileSize / (1024 * 1024))}MB.` };
-      }
-      return { ok: true };
-    },
-    [maxFileSize]
-  );
-
   // Handlers for file selection
   const onFileChange = useCallback(
     (e) => {
       const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
       if (!f) return;
-      const v = validateFile(f);
+      const v = validateFile(f, Math.round(maxFileSize / (1024 * 1024)));
       if (!v.ok) {
         setError(v.reason);
         setFile(null);
@@ -66,7 +43,7 @@ export default function ResumeUpload({ onAnalyze, maxFileSize = 5 * 1024 * 1024 
       // If a file is chosen, clear pasted text to avoid ambiguity
       setResumeText('');
     },
-    [validateFile]
+    [maxFileSize]
   );
 
   // Drag and drop handlers
@@ -87,7 +64,7 @@ export default function ResumeUpload({ onAnalyze, maxFileSize = 5 * 1024 * 1024 
       setDragActive(false);
       const f = e.dataTransfer.files && e.dataTransfer.files[0] ? e.dataTransfer.files[0] : null;
       if (!f) return;
-      const v = validateFile(f);
+      const v = validateFile(f, Math.round(maxFileSize / (1024 * 1024)));
       if (!v.ok) {
         setError(v.reason);
         setFile(null);
@@ -97,7 +74,7 @@ export default function ResumeUpload({ onAnalyze, maxFileSize = 5 * 1024 * 1024 
       setFile(f);
       setResumeText('');
     },
-    [validateFile]
+    [maxFileSize]
   );
 
   const chooseFile = useCallback(() => {
@@ -109,10 +86,8 @@ export default function ResumeUpload({ onAnalyze, maxFileSize = 5 * 1024 * 1024 
   // Prepare payload helpers using api/client.js but do not invoke yet
   const prepareMultipart = useCallback(() => {
     if (!file) return null;
-    const fd = new FormData();
-    fd.append('resume', file);
-    // Additional fields can be appended later (e.g., jobDescription)
-    return fd;
+    // Place under 'resume' key to align with existing code expectations
+    return buildFormData(file, 'resume');
   }, [file]);
 
   const prepareJson = useCallback(() => {
@@ -130,7 +105,7 @@ export default function ResumeUpload({ onAnalyze, maxFileSize = 5 * 1024 * 1024 
         return;
       }
       if (file) {
-        const v = validateFile(file);
+        const v = validateFile(file, Math.round(maxFileSize / (1024 * 1024)));
         if (!v.ok) {
           setError(v.reason);
           return;
@@ -148,7 +123,7 @@ export default function ResumeUpload({ onAnalyze, maxFileSize = 5 * 1024 * 1024 
         api: { postJson, postMultipart },
       });
     },
-    [file, resumeText, onAnalyze, validateFile, prepareJson, prepareMultipart]
+    [file, resumeText, onAnalyze, maxFileSize, prepareJson, prepareMultipart]
   );
 
   const onPasteTextChange = useCallback((e) => {
