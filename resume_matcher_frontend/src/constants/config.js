@@ -7,8 +7,7 @@
  * Returns the base URL for backend API calls.
  * Priority:
  * 1) window._CONFIG.API_BASE_URL (runtime, preferred)
- * 2) process.env.REACT_APP_API_BASE_URL (build-time, optional)
- * 3) 'http://localhost:8000' (default fallback)
+ * 2) 'http://localhost:8000' (default fallback)
  *
  * PUBLIC_INTERFACE
  * @returns {string} The API base URL string.
@@ -23,16 +22,8 @@ export function getApiBaseUrl() {
       ? window._CONFIG.API_BASE_URL
       : undefined;
 
-  // Optional build-time env (works in CRA)
-  const buildTimeBase =
-    typeof process !== 'undefined' &&
-    process.env &&
-    process.env.REACT_APP_API_BASE_URL &&
-    String(process.env.REACT_APP_API_BASE_URL).trim().length > 0
-      ? String(process.env.REACT_APP_API_BASE_URL)
-      : undefined;
-
-  return runtimeBase || buildTimeBase || 'http://localhost:8000';
+  // No environment variables should be introduced. Fallback to sensible default.
+  return runtimeBase || 'http://localhost:8000';
 }
 
 /**

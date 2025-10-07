@@ -6,8 +6,8 @@ import { getApiBaseUrl } from '../constants/config';
 export default function Settings() {
   /**
    * Settings - Shows runtime configuration and simple controls (placeholders).
-   * - Displays resolved API base URL using runtime/build-time config
-   * - Includes placeholder toggles/inputs for future preferences
+   * - Displays resolved API base URL using runtime config
+   * - Includes clear instructions to configure public/config.js
    * - Does not persist or call APIs yet
    */
   const apiBase = useMemo(() => getApiBaseUrl(), []);
@@ -24,9 +24,25 @@ export default function Settings() {
           <h3 style={{ marginTop: 0 }}>Runtime Configuration</h3>
           <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
             <div>
-              <div style={{ color: 'var(--color-text-muted)' }}>API Base URL</div>
+              <div style={{ color: 'var(--color-text-muted)' }}>API Base URL (resolved)</div>
               <code style={{ display: 'block', marginTop: 4 }}>{apiBase}</code>
             </div>
+
+            <div>
+              <div style={{ color: 'var(--color-text-muted)' }}>How to change API Base URL</div>
+              <div className="card" style={{ marginTop: 8 }}>
+                <ol style={{ margin: 0, paddingLeft: 18 }}>
+                  <li>Open the file: <code>public/config.js</code></li>
+                  <li>Set <code>window._CONFIG.API_BASE_URL</code> to your backend URL (no trailing slash)</li>
+                  <li>Example: <code>window._CONFIG = {{ API_BASE_URL: 'http://localhost:8000' }}</code></li>
+                  <li>Reload the app to apply changes</li>
+                </ol>
+                <p className="description" style={{ marginTop: 8 }}>
+                  Note: No environment variables are required; use public/config.js for runtime configuration.
+                </p>
+              </div>
+            </div>
+
             <div>
               <div style={{ color: 'var(--color-text-muted)' }}>Theme</div>
               <div>Use the header toggle to switch between Light/Dark modes.</div>
