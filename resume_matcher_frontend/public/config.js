@@ -1,19 +1,18 @@
 (function () {
-  // PUBLIC RUNTIME CONFIG
-  // This file is loaded by the browser before the app runs.
-  // Configure your backend API base URL here. Do NOT include a trailing slash.
-  //
-  // Example:
-  // window._CONFIG = {
-  //   API_BASE_URL: 'http://localhost:8000'
-  // };
-  //
-  // Leaving API_BASE_URL as an empty string will make the app fall back to:
-  //   http://localhost:8000
-  //
-  // Note: No environment variables are required. Edit this file to change the backend URL.
+  // Define a global configuration object. This file is loaded before the React bundle.
+  // Do not convert this to a module export; it must set a global on window.
+  // You can change API_BASE_URL at runtime without rebuilding. Use a fully qualified URL and no trailing slash.
+  if (typeof window === 'undefined') return;
 
-  window._CONFIG = {
-    API_BASE_URL: '' // Set to your backend URL, e.g. 'https://api.example.com'
-  };
+  // Preserve any existing keys if config.js is reloaded
+  window._CONFIG = window._CONFIG || {};
+
+  // Ensure API_BASE_URL key exists (can be set to your backend URL)
+  // Example targets:
+  // - Local backend:        http://localhost:8000
+  // - Docker compose:       http://ai_backend_api:8000
+  // - Remote dev/staging:   https://dev.api.example.com
+  if (typeof window._CONFIG.API_BASE_URL !== 'string') {
+    window._CONFIG.API_BASE_URL = '';
+  }
 })();

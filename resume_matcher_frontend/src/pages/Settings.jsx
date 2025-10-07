@@ -14,14 +14,17 @@ export default function Settings() {
    * as JSX children (e.g., {window._CONFIG}). Use strings or JSON.stringify inside <pre>.
    */
   const apiBase = useMemo(() => getApiBaseUrl(), []);
-  const rawConfigJson = useMemo(() => {
+
+  const { rawConfigJson, hasConfigObject, isConfigEmpty } = useMemo(() => {
     try {
-      // Safely stringify for display
-      // eslint-disable-next-line no-underscore-dangle
-      const obj = typeof window !== 'undefined' && window._CONFIG ? window._CONFIG : {};
-      return JSON.stringify(obj, null, 2);
+      const obj = typeof window !== 'undefined' && window._CONFIG ? window._CONFIG : null;
+      return {
+        rawConfigJson: JSON.stringify(obj || {}, null, 2),
+        hasConfigObject: !!obj,
+        isConfigEmpty: !obj || (obj && Object.keys(obj).length === 0),
+      };
     } catch {
-      return '{}';
+      return { rawConfigJson: '{}', hasConfigObject: false, isConfigEmpty: true };
     }
   }, []);
 
@@ -37,12 +40,36 @@ export default function Settings() {
           <h3 style={{ marginTop: 0 }}>Runtime Configuration</h3>
           <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
             <div>
-              <div style={{ color: 'var(--color-text-muted)' }}>API Base URL (resolved)</div>
+              <div style={{ color: 'var(--color-text-muted)' }}>API Base URL (resolved via getApiBaseUrl)</div>
               <code style={{ display: 'block', marginTop: 4 }}>{apiBase}</code>
+              <p className="description" style={{ marginTop: 6 }}>
+                This value is the source of truth for all API requests. It prefers window._CONFIG.API_BASE_URL and
+                falls back to http://localhost:8000 if not set.
+              </p>
             </div>
 
             <div>
               <div style={{ color: 'var(--color-text-muted)' }}>Current raw runtime config (window._CONFIG)</div>
+              {!hasConfigObject && (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="card"
+                  style={{ color: 'var(--color-error)', marginTop: 8, fontWeight: 600 }}
+                >
+                  Runtime config object not found; ensure public/config.js is loaded before the app bundle.
+                </div>
+              )}
+              {hasConfigObject && isConfigEmpty && (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="card"
+                  style={{ color: 'var(--color-error)', marginTop: 8, fontWeight: 600 }}
+                >
+                  Runtime config object is empty; make sure public/config.js sets window._CONFIG with API_BASE_URL.
+                </div>
+              )}
               <div
                 className="card"
                 style={{
@@ -65,8 +92,16 @@ export default function Settings() {
                 <ol style={{ margin: 0, paddingLeft: 18 }}>
                   <li>Open the file: <code>public/config.js</code></li>
                   <li>Set <code>window._CONFIG.API_BASE_URL</code> to your backend URL (no trailing slash)</li>
-                  <li>Example: <code>{String("window._CONFIG = { API_BASE_URL: 'http://localhost:8000' }")}</code></li>
-                  <li>Reload the app to apply changes</li>
+                  <li>Example snippet:</li>
+                </ol>
+                <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>
+{String(`<script>
+  window._CONFIG = window._CONFIG || { API_BASE_URL: "http://localhost:8000" };
+</script>`)}
+                </pre>
+                <ol start={4} style={{ margin: 0, paddingLeft: 18 }}>
+                  <li>Ensure <code>&lt;script src="/config.js"&gt;&lt;/script&gt;</code> loads before the React bundle in <code>public/index.html</code>.</li>
+                  <li>Reload the app to apply changes.</li>
                 </ol>
                 <p className="description" style={{ marginTop: 8 }}>
                   Note: No environment variables are required; use public/config.js for runtime configuration.
