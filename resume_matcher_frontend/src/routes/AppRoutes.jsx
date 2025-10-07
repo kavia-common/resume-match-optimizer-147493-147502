@@ -5,51 +5,19 @@ import Header from '../components/Layout/Header';
 import Sidebar from '../components/Layout/Sidebar';
 import Container from '../components/Layout/Container';
 
-// Placeholder pages to avoid runtime errors; replace with real implementations later.
-function DashboardPage() {
-  return (
-    <section className="panel">
-      <h2>Dashboard</h2>
-      <p className="description">Overview and quick actions.</p>
-    </section>
-  );
-}
-
-function ResumeOptimizerPage() {
-  return (
-    <section className="panel">
-      <h2>Resume Optimizer</h2>
-      <p className="description">Upload or paste your resume to get ATS optimization suggestions.</p>
-    </section>
-  );
-}
-
-function JobMatcherPage() {
-  return (
-    <section className="panel">
-      <h2>Job Matcher</h2>
-      <p className="description">Find the most relevant jobs matching your resume.</p>
-    </section>
-  );
-}
-
-function SettingsPage() {
-  return (
-    <section className="panel">
-      <h2>Settings</h2>
-      <p className="description">Configure preferences and integrations.</p>
-    </section>
-  );
-}
+import Dashboard from '../pages/Dashboard';
+import ResumeOptimizer from '../pages/ResumeOptimizer';
+import JobMatcher from '../pages/JobMatcher';
+import Settings from '../pages/Settings';
 
 /**
  * PUBLIC_INTERFACE
  * AppRoutes - Defines application routes using React Router v6.
  * Routes:
- * - '/'          -> DashboardPage
- * - '/resume'    -> ResumeOptimizerPage
- * - '/match'     -> JobMatcherPage
- * - '/settings'  -> SettingsPage
+ * - '/'          -> Dashboard
+ * - '/resume'    -> ResumeOptimizer
+ * - '/match'     -> JobMatcher
+ * - '/settings'  -> Settings
  * - Fallback     -> redirect to '/'
  */
 export default function AppRoutes({ onToggleTheme, theme }) {
@@ -60,10 +28,10 @@ export default function AppRoutes({ onToggleTheme, theme }) {
         <Header onToggleTheme={onToggleTheme} theme={theme} />
         <Container>
           <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/resume" element={<ResumeOptimizerPage />} />
-            <Route path="/match" element={<JobMatcherPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/resume" element={<ResumeOptimizer />} />
+            <Route path="/match" element={<JobMatcher />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Container>
