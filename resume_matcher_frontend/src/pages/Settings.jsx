@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import Container from '../components/Layout/Container';
 import { getApiBaseUrl } from '../constants/config';
 import { apiUrl } from '../api/endpoints';
+import { clearDrafts } from '../utils/storage';
 
 // PUBLIC_INTERFACE
 export default function Settings() {
@@ -28,6 +29,8 @@ export default function Settings() {
       return { rawConfigJson: '{}', hasConfigObject: false, isConfigEmpty: true };
     }
   }, []);
+
+  const [clearMessage, setClearMessage] = useState('');
 
   return (
     <Container as="section" role="region" ariaLabel="Settings">
@@ -139,6 +142,36 @@ export default function Settings() {
               <div style={{ color: 'var(--color-text-muted)' }}>Theme</div>
               <div>Use the header toggle to switch between Light/Dark modes.</div>
             </div>
+          </div>
+        </div>
+
+        {/* Draft management */}
+        <div className="card" aria-label="Draft management" style={{ marginTop: 16 }}>
+          <h3 style={{ marginTop: 0 }}>Drafts</h3>
+          <p className="description" style={{ marginTop: 4 }}>
+            Manage locally saved drafts for Resume and Job forms. Drafts are stored in your browser only.
+          </p>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => {
+                const res = clearDrafts();
+                const count = (res?.removed || []).length;
+                setClearMessage(count > 0 ? `Cleared ${count} draft key(s).` : 'No drafts found to clear.');
+                // Auto-hide message after a moment
+                setTimeout(() => setClearMessage(''), 2500);
+              }}
+              aria-label="Clear all saved drafts"
+              title="Clear all saved drafts"
+            >
+              Clear All Drafts
+            </button>
+            {clearMessage && (
+              <span aria-live="polite" style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
+                {clearMessage}
+              </span>
+            )}
           </div>
         </div>
 

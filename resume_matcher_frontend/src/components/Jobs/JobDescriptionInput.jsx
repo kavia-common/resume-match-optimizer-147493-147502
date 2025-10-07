@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 
 /**
  * PUBLIC_INTERFACE
@@ -29,10 +29,15 @@ export default function JobDescriptionInput({
   initialResumeText = '',
   isLoading = false,
   error = null,
+  // New props for draft integration
+  initialJobTitle = '',
+  initialCompany = '',
+  initialJobDescription = '',
+  onFieldsChange, // (fields: { jobTitle, company, jobDescription }) => void
 }) {
-  const [jobTitle, setJobTitle] = useState('');
-  const [company, setCompany] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
+  const [jobTitle, setJobTitle] = useState(initialJobTitle || '');
+  const [company, setCompany] = useState(initialCompany || '');
+  const [jobDescription, setJobDescription] = useState(initialJobDescription || '');
   const [localError, setLocalError] = useState(null);
 
   const composedError = useMemo(() => {
@@ -114,12 +119,22 @@ export default function JobDescriptionInput({
     [jobTitle, company, jobDescription, onSuggest, initialResumeText, canSubmitSuggest]
   );
 
+  // Notify parent when fields change (for autosave)
+  useEffect(() => {
+    onFieldsChange?.({
+      jobTitle,
+      company,
+      jobDescription,
+    });
+  }, [jobTitle, company, jobDescription, onFieldsChange]);
+
   const clear = useCallback(() => {
     setJobTitle('');
     setCompany('');
     setJobDescription('');
     setLocalError(null);
-  }, []);
+    onFieldsChange?.({ jobTitle: '', company: '', jobDescription: '' });
+  }, [onFieldsChange]);
 
   return (
     <section className="panel" aria-label="Job description input panel">

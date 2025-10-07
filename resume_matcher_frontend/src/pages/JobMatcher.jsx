@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Container from '../components/Layout/Container';
 import JobDescriptionInput from '../components/Jobs/JobDescriptionInput';
 import JobSuggestions from '../components/Jobs/JobSuggestions';
@@ -7,6 +7,7 @@ import SuggestionModal from '../components/Matching/SuggestionModal';
 import useApi from '../hooks/useApi';
 import { postJson } from '../api/client';
 import { endpoints } from '../api/endpoints';
+import { getJson, setJson, removeItem, storageKeys } from '../utils/storage';
 
 // PUBLIC_INTERFACE
 export default function JobMatcher() {
@@ -15,11 +16,74 @@ export default function JobMatcher() {
    * - Uses JobDescriptionInput to accept description and emit onMatch/onSuggest
    * - Calls POST /api/jobs/suggest and POST /api/jobs/match via api/client
    * - Displays loading/error states and renders results
+   * - Autosaves a local job draft (title/company/description) with debounce to localStorage.
    */
 
   // State for modal suggestion details
   const [modalOpen, setModalOpen] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(null);
+
+  // Local job draft state
+  const [jobDraft, setJobDraft] = useState(() => {
+    const saved = getJson(storageKeys.jobDraft);
+    // Shape: { jobTitle?: string, company?: string, jobDescription?: string }
+    if (saved && typeof saved === 'object') {
+      return {
+        jobTitle: String(saved.jobTitle || ''),
+        company: String(saved.company || ''),
+        jobDescription: String(saved.jobDescription || ''),
+      };
+    }
+    return { jobTitle: '', company: '', jobDescription: '' };
+  });
+  const [hasRestorable, setHasRestorable] = useState(() => {
+    const saved = getJson(storageKeys.jobDraft);
+    const s = (saved && typeof saved === 'object') ? saved : {};
+    const hasAny =
+      (s.jobTitle && String(s.jobTitle).trim().length > 0) ||
+      (s.company && String(s.company).trim().length > 0) ||
+      (s.jobDescription && String(s.jobDescription).trim().length > 0);
+    return !!hasAny;
+  });
+
+  // Debounced persistence
+  const debounceRef = useRef(null);
+  useEffect(() => {
+    if (!jobDraft) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setJson(storageKeys.jobDraft, {
+        jobTitle: jobDraft.jobTitle || '',
+        company: jobDraft.company || '',
+        jobDescription: jobDraft.jobDescription || '',
+      });
+    }, 500);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [jobDraft]);
+
+  const restoreDraft = useCallback(() => {
+    const saved = getJson(storageKeys.jobDraft);
+    if (saved && typeof saved === 'object') {
+      setJobDraft({
+        jobTitle: String(saved.jobTitle || ''),
+        company: String(saved.company || ''),
+        jobDescription: String(saved.jobDescription || ''),
+      });
+      const hasAny =
+        (saved.jobTitle && String(saved.jobTitle).trim().length > 0) ||
+        (saved.company && String(saved.company).trim().length > 0) ||
+        (saved.jobDescription && String(saved.jobDescription).trim().length > 0);
+      setHasRestorable(!!hasAny);
+    }
+  }, []);
+
+  const clearDraft = useCallback(() => {
+    removeItem(storageKeys.jobDraft);
+    setJobDraft({ jobTitle: '', company: '', jobDescription: '' });
+    setHasRestorable(false);
+  }, []);
 
   // Suggest jobs API
   const suggestFn = useCallback(
@@ -151,12 +215,67 @@ export default function JobMatcher() {
           </p>
         </header>
 
+        {/* Draft controls */}
+        <div className="card" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
+            Drafts are saved locally in your browser.
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={restoreDraft}
+              aria-label="Restore job draft"
+              title="Restore job draft"
+              disabled={!hasRestorable}
+            >
+              Restore draft
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={clearDraft}
+              aria-label="Clear job draft"
+              title="Clear job draft"
+            >
+              Clear draft
+            </button>
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gap: 16 }}>
           <JobDescriptionInput
-            onMatch={onMatch}
-            onSuggest={onSuggest}
+            onMatch={(payload) => {
+              // Update local draft with latest fields inferred from payload/jobDescription text
+              if (payload && typeof payload.jobDescription === 'string') {
+                setJobDraft((prev) => ({ ...prev, jobDescription: payload.jobDescription }));
+                setHasRestorable(true);
+              }
+              // Best-effort: jobTitle/company are not in payload built in child for match, but keep previous.
+              onMatch(payload);
+            }}
+            onSuggest={(payload) => {
+              // Suggestions are built from jobTitle/company/description; try to persist what's derivable
+              // The payload contains query, not raw fields; keep existing draft.
+              onSuggest(payload);
+            }}
             isLoading={isSuggesting || isMatching}
             error={friendlySuggestError || friendlyMatchError}
+            initialJobTitle={jobDraft.jobTitle}
+            initialCompany={jobDraft.company}
+            initialJobDescription={jobDraft.jobDescription}
+            onFieldsChange={(fields) => {
+              setJobDraft({
+                jobTitle: fields.jobTitle || '',
+                company: fields.company || '',
+                jobDescription: fields.jobDescription || '',
+              });
+              const hasAny =
+                (fields.jobTitle && fields.jobTitle.trim().length > 0) ||
+                (fields.company && fields.company.trim().length > 0) ||
+                (fields.jobDescription && fields.jobDescription.trim().length > 0);
+              setHasRestorable(!!hasAny);
+            }}
           />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

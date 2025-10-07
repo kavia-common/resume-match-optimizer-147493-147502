@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Container from '../components/Layout/Container';
 import ResumeUpload from '../components/Resume/ResumeUpload';
 import ResumePreview from '../components/Resume/ResumePreview';
 import useApi from '../hooks/useApi';
 import { postJson, postMultipart } from '../api/client';
 import { endpoints } from '../api/endpoints';
+import { getJson, setJson, removeItem, storageKeys } from '../utils/storage';
 
 // PUBLIC_INTERFACE
 export default function ResumeOptimizer() {
@@ -14,8 +15,48 @@ export default function ResumeOptimizer() {
    * - Calls POST /api/resumes/analyze using multipart for file or JSON for text
    * - Shows loading/error and renders analysis in ResumePreview
    * - Provides a local insights view (client-side) when pasted text is available or backend is unavailable.
+   * - Autosaves a local draft (resume text only) with debounce to localStorage.
    */
   const [lastPayload, setLastPayload] = useState(null);
+  const [draft, setDraft] = useState(() => {
+    // Load draft once on mount
+    const saved = getJson(storageKeys.resumeDraft);
+    // Shape: { resumeText: string }
+    if (saved && typeof saved.resumeText === 'string') return saved;
+    return { resumeText: '' };
+  });
+  const [hasRestorable, setHasRestorable] = useState(() => {
+    const saved = getJson(storageKeys.resumeDraft);
+    return !!(saved && typeof saved.resumeText === 'string' && saved.resumeText.trim().length > 0);
+  });
+
+  // Debounce persistence
+  const debounceRef = useRef(null);
+  useEffect(() => {
+    // Save only when resumeText changes
+    if (!draft) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setJson(storageKeys.resumeDraft, { resumeText: draft.resumeText || '' });
+    }, 500);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [draft]);
+
+  const restoreDraft = useCallback(() => {
+    const saved = getJson(storageKeys.resumeDraft);
+    if (saved && typeof saved.resumeText === 'string') {
+      setDraft({ resumeText: saved.resumeText });
+      setHasRestorable(true);
+    }
+  }, []);
+
+  const clearDraft = useCallback(() => {
+    removeItem(storageKeys.resumeDraft);
+    setDraft({ resumeText: '' });
+    setHasRestorable(false);
+  }, []);
 
   // Request function for useApi; accepts either { formData } or { json }
   const analyzeFn = useCallback(
@@ -38,13 +79,19 @@ export default function ResumeOptimizer() {
   const handleAnalyze = useCallback(
     ({ resumeText, file, prepareJson, prepareMultipart }) => {
       setLastPayload({ resumeText: resumeText || null, hasFile: !!file });
+
+      // Update local draft from latest resumeText supplied by child (if any)
+      if (typeof resumeText === 'string') {
+        setDraft({ resumeText });
+        setHasRestorable((resumeText || '').trim().length > 0);
+      }
+
       // Prefer file if provided; otherwise send JSON with resumeText
       if (file && typeof prepareMultipart === 'function') {
         const fd = prepareMultipart();
         if (!fd) return;
         request({ formData: fd }, { timeout: 30000 });
         return;
-        // eslint-disable-next-line no-else-return
       } else if (resumeText && typeof prepareJson === 'function') {
         const json = prepareJson();
         request({ json }, { timeout: 30000 });
@@ -77,6 +124,10 @@ export default function ResumeOptimizer() {
   // When we have pasted text and either: (a) backend hasn't returned data yet, or (b) there was an error,
   // we still want to show local insights. We'll pass localText and localKeywords to ResumePreview.
   const localText = useMemo(() => {
+    // Prefer the current draft text if available and there is no file in lastPayload
+    if (draft && typeof draft.resumeText === 'string' && draft.resumeText.trim().length > 0) {
+      return draft.resumeText;
+    }
     // Only use pasted text when last payload indicates it (no file) and we have a string
     if (lastPayload && !lastPayload.hasFile && typeof lastPayload.resumeText === 'string') {
       return lastPayload.resumeText;
@@ -86,7 +137,7 @@ export default function ResumeOptimizer() {
       return lastPayload.resumeText;
     }
     return '';
-  }, [lastPayload, composedError]);
+  }, [draft, lastPayload, composedError]);
 
   const localKeywords = useMemo(() => {
     // Prefer backend-provided keywords if available; else fallback to a small default set for highlighting
@@ -104,6 +155,34 @@ export default function ResumeOptimizer() {
             Upload your resume and review ATS-optimized suggestions before applying to jobs.
           </p>
         </header>
+
+        {/* Draft controls */}
+        <div className="card" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
+            Drafts are saved locally in your browser.
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={restoreDraft}
+              aria-label="Restore resume draft"
+              title="Restore resume draft"
+              disabled={!hasRestorable}
+            >
+              Restore draft
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={clearDraft}
+              aria-label="Clear resume draft"
+              title="Clear resume draft"
+            >
+              Clear draft
+            </button>
+          </div>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
