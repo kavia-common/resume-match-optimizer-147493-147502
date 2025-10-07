@@ -13,6 +13,7 @@ export default function ResumeOptimizer() {
    * - Uses ResumeUpload to collect file/text and emits onAnalyze payload
    * - Calls POST /api/resumes/analyze using multipart for file or JSON for text
    * - Shows loading/error and renders analysis in ResumePreview
+   * - Provides a local insights view (client-side) when pasted text is available or backend is unavailable.
    */
   const [lastPayload, setLastPayload] = useState(null);
 
@@ -73,6 +74,27 @@ export default function ResumeOptimizer() {
     return error.message || 'An error occurred.';
   }, [error]);
 
+  // When we have pasted text and either: (a) backend hasn't returned data yet, or (b) there was an error,
+  // we still want to show local insights. We'll pass localText and localKeywords to ResumePreview.
+  const localText = useMemo(() => {
+    // Only use pasted text when last payload indicates it (no file) and we have a string
+    if (lastPayload && !lastPayload.hasFile && typeof lastPayload.resumeText === 'string') {
+      return lastPayload.resumeText;
+    }
+    // If there was a network error and lastPayload.resumeText exists, still show local insights
+    if (composedError && lastPayload && typeof lastPayload.resumeText === 'string') {
+      return lastPayload.resumeText;
+    }
+    return '';
+  }, [lastPayload, composedError]);
+
+  const localKeywords = useMemo(() => {
+    // Prefer backend-provided keywords if available; else fallback to a small default set for highlighting
+    if (data && Array.isArray(data.keywords) && data.keywords.length > 0) return data.keywords;
+    // Fallback defaults to keep UX helpful
+    return ['experience', 'project', 'react', 'typescript', 'python', 'lead', 'optimize'];
+  }, [data]);
+
   return (
     <Container as="section" role="region" ariaLabel="Resume Optimizer">
       <div className="panel">
@@ -113,7 +135,12 @@ export default function ResumeOptimizer() {
             )}
           </div>
           <div>
-            <ResumePreview data={data} onApplySuggestion={handleApplySuggestion} />
+            <ResumePreview
+              data={data}
+              onApplySuggestion={handleApplySuggestion}
+              localText={localText}
+              localKeywords={localKeywords}
+            />
           </div>
         </div>
       </div>
