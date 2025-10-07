@@ -1,4 +1,5 @@
 //
+//
 // Centralized endpoints map for backend API routes.
 // Provides stable names and resolved URLs using getApiBaseUrl().
 //
@@ -14,13 +15,24 @@ import { getApiBaseUrl } from '../constants/config';
  */
 function joinUrl(base, path) {
   try {
-    // Prefer URL constructor which handles most cases well
-    return new URL(path, base).toString();
+    // Normalize to avoid double slashes; URL will still resolve correctly either way.
+    const bNorm = String(base || '').replace(/\/+$/, '');
+    const full = new URL(path, bNorm + '/').toString();
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('[api.joinUrl]', { base: bNorm, path, full });
+    } catch (_) {}
+    return full;
   } catch {
     // Fallback join to be extra safe in odd cases
     const b = String(base || '').replace(/\/+$/, '');
     const p = String(path || '').replace(/^\/+/, '/');
-    return `${b}${p}`;
+    const joined = `${b}${p}`;
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('[api.joinUrl:fallback]', { base: b, path: p, full: joined });
+    } catch (_) {}
+    return joined;
   }
 }
 

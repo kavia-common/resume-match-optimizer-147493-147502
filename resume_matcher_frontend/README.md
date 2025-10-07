@@ -166,3 +166,12 @@ CORS tips:
 - Allowed methods should include GET, POST, OPTIONS
 - Allowed headers typically include Content-Type, Accept, Authorization (if used)
 - Handle OPTIONS preflight requests; FastAPI CORSMiddleware is already configured to expose X-Request-ID
+
+Remote preview vs localhost:
+- If the frontend runs at a remote preview URL (e.g., https://vscode-internal-...cloud.kavia.ai:3000), setting API_BASE_URL to http://localhost:8000 will attempt to access the user’s local machine, not the backend container.
+- In that case, set API_BASE_URL in public/config.js to the backend’s reachable URL (public IP/hostname) and ensure the backend is bound to 0.0.0.0:8000.
+- Add a temporary health check route on the backend: GET /api/health returning {"status":"ok"} and ensure CORS allows the preview origin. Then visit /settings and click the /api/health link to verify reachability.
+
+Health check:
+- Verify GET {API_BASE_URL}/api/health responds 200 OK with JSON and CORS.
+- If failing, fix base URL, backend binding (use --host 0.0.0.0), firewall rules, and CORS allowed origins.

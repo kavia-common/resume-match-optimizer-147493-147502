@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import Container from '../components/Layout/Container';
 import { getApiBaseUrl } from '../constants/config';
+import { apiUrl } from '../api/endpoints';
 
 // PUBLIC_INTERFACE
 export default function Settings() {
@@ -46,6 +47,31 @@ export default function Settings() {
                 This value is the source of truth for all API requests. It prefers window._CONFIG.API_BASE_URL and
                 falls back to http://localhost:8000 if not set.
               </p>
+            </div>
+
+            <div>
+              <div style={{ color: 'var(--color-text-muted)' }}>Endpoint resolution</div>
+              <div className="card" style={{ marginTop: 8 }}>
+                <div>Analyze endpoint (POST):</div>
+                <code style={{ display: 'block', marginTop: 4 }}>{apiUrl('/api/resumes/analyze')}</code>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ color: 'var(--color-text-muted)' }}>Connectivity quick check</div>
+              <div className="card" style={{ marginTop: 8 }}>
+                <ol style={{ margin: 0, paddingLeft: 18 }}>
+                  <li>
+                    Open this URL in a new tab to test backend reachability and CORS:
+                    {' '}
+                    <a href={apiUrl('/api/health')} target="_blank" rel="noreferrer">
+                      {apiUrl('/api/health')}
+                    </a>
+                  </li>
+                  <li>Expected: HTTP 200 OK with a small JSON like {"{ \"status\": \"ok\" }"} and CORS allows this origin.</li>
+                  <li>If it fails in preview, ensure API_BASE_URL is not localhost but the backend's reachable URL, and backend binds to 0.0.0.0:8000.</li>
+                </ol>
+              </div>
             </div>
 
             <div>

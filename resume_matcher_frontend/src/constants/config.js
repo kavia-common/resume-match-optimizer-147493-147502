@@ -7,6 +7,8 @@
  * Returns the base URL for backend API calls.
  * Priority:
  * 1) window._CONFIG.API_BASE_URL (runtime, preferred)
+ *  - Must be fully qualified; do NOT include trailing slash.
+ *  - For remote previews, set to the backend's reachable URL (not localhost).
  * 2) 'http://localhost:8000' (default fallback)
  *
  * PUBLIC_INTERFACE

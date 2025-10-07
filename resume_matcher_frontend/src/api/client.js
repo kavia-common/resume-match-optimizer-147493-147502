@@ -75,7 +75,9 @@ async function parseJsonSafely(res) {
  */
 export async function request(path, options = {}) {
   const baseUrl = getApiBaseUrl();
-  const url = new URL(path, baseUrl).toString();
+  // Ensure baseUrl has no trailing slash for readability in logs; URL() will handle either way
+  const baseUrlNormalized = String(baseUrl || '').replace(/\/+$/, '');
+  const url = new URL(path, baseUrlNormalized + '/').toString();
 
   const {
     headers: customHeaders,
@@ -95,8 +97,10 @@ export async function request(path, options = {}) {
     try {
       // Only log minimal info; do not log sensitive headers.
       // eslint-disable-next-line no-console
-      console.debug('[api.request] ->', {
-        url,
+      console.info('[api.request]', {
+        baseUrl: baseUrlNormalized,
+        path,
+        finalUrl: url,
         method: (rest && rest.method) || 'GET',
         origin: typeof window !== 'undefined' ? window.location.origin : 'n/a',
         hasContentType: headers.has('Content-Type'),
@@ -144,12 +148,44 @@ export async function request(path, options = {}) {
           : null;
       const serverMessage = parsedMessage || response.statusText || 'Request failed';
 
+      try {
+        // eslint-disable-next-line no-console
+        console.info('[api.response]', {
+          finalUrl: url,
+          method: (rest && rest.method) || 'GET',
+          status: response.status,
+          ok: false,
+          note: 'Non-2xx response received',
+        });
+      } catch (_) {}
+
       throw createError('HTTP_ERROR', serverMessage, response.status, parsed);
     }
+
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[api.response]', {
+        finalUrl: url,
+        method: (rest && rest.method) || 'GET',
+        status: response.status,
+        ok: true,
+      });
+    } catch (_) {}
 
     return { data: parsed, status: response.status, headers: response.headers };
   } catch (err) {
     if (err && err.code && err.message) {
+      try {
+        // eslint-disable-next-line no-console
+        console.info('[api.error]', {
+          finalUrl: (() => {
+            try { return new URL(path, baseUrl).toString(); } catch { return String(path); }
+          })(),
+          method: (options && options.method) || 'GET',
+          code: err.code,
+          message: err.message,
+        });
+      } catch (_) {}
       // Already standardized error
       throw err;
     }
@@ -157,6 +193,17 @@ export async function request(path, options = {}) {
     // Network or unknown error
     const message =
       (err && err.message) || 'Network error occurred while making the request';
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[api.error]', {
+        finalUrl: (() => {
+          try { return new URL(path, baseUrl).toString(); } catch { return String(path); }
+        })(),
+        method: (options && options.method) || 'GET',
+        code: 'NETWORK_ERROR',
+        message,
+      });
+    } catch (_) {}
     throw createError('NETWORK_ERROR', message);
   }
 }
