@@ -91,7 +91,11 @@ export async function request(path, options = {}) {
   }
 
   try {
-    const response = await withTimeout(fetch(url, { headers, ...rest }), timeout);
+    // Ensure CORS mode for cross-origin requests. Credentials are omitted by default.
+    const response = await withTimeout(
+      fetch(url, { headers, mode: 'cors', ...rest }),
+      timeout
+    );
 
     const contentType = response.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');
