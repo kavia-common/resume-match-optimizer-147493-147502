@@ -65,6 +65,11 @@ export default function ResumeOptimizer() {
     if (error.code === 'NETWORK_ERROR') {
       return `${error.message}. Please verify the backend is reachable at the configured API base URL and CORS is enabled.`;
     }
+    // If HTTP error, include status when available
+    if (error.code === 'HTTP_ERROR') {
+      const statusPart = typeof error.status === 'number' ? ` (HTTP ${error.status})` : '';
+      return `${error.message}${statusPart}`;
+    }
     return error.message || 'An error occurred.';
   }, [error]);
 

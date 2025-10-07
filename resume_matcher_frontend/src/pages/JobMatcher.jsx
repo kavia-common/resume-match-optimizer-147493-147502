@@ -122,6 +122,10 @@ export default function JobMatcher() {
     if (suggestError.code === 'NETWORK_ERROR') {
       return `${suggestError.message}. Check API base URL and CORS settings.`;
     }
+    if (suggestError.code === 'HTTP_ERROR') {
+      const statusPart = typeof suggestError.status === 'number' ? ` (HTTP ${suggestError.status})` : '';
+      return `${suggestError.message}${statusPart}`;
+    }
     return suggestError.message || 'Failed to fetch suggestions.';
   }, [suggestError]);
 
@@ -129,6 +133,10 @@ export default function JobMatcher() {
     if (!matchError) return null;
     if (matchError.code === 'NETWORK_ERROR') {
       return `${matchError.message}. Check API base URL and CORS settings.`;
+    }
+    if (matchError.code === 'HTTP_ERROR') {
+      const statusPart = typeof matchError.status === 'number' ? ` (HTTP ${matchError.status})` : '';
+      return `${matchError.message}${statusPart}`;
     }
     return matchError.message || 'Failed to fetch match results.';
   }, [matchError]);

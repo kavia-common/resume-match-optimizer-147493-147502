@@ -5,6 +5,26 @@
 import { getApiBaseUrl } from '../constants/config';
 
 /**
+ * Normalize and join a base URL with a relative path avoiding double slashes.
+ * This ensures that if the base has a trailing slash or the path has a leading slash,
+ * the final URL is correct and stable.
+ * @param {string} base
+ * @param {string} path
+ * @returns {string}
+ */
+function joinUrl(base, path) {
+  try {
+    // Prefer URL constructor which handles most cases well
+    return new URL(path, base).toString();
+  } catch {
+    // Fallback join to be extra safe in odd cases
+    const b = String(base || '').replace(/\/+$/, '');
+    const p = String(path || '').replace(/^\/+/, '/');
+    return `${b}${p}`;
+  }
+}
+
+/**
  * PUBLIC_INTERFACE
  * Returns the fully qualified API URL for a given relative path.
  * @param {string} path - Relative path like '/api/jobs/match'
@@ -15,7 +35,7 @@ import { getApiBaseUrl } from '../constants/config';
  * const res = await fetch(url, { method: 'POST' });
  */
 export function apiUrl(path) {
-  return new URL(path, getApiBaseUrl()).toString();
+  return joinUrl(getApiBaseUrl(), path);
 }
 
 /**

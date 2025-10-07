@@ -91,6 +91,19 @@ export async function request(path, options = {}) {
   }
 
   try {
+    // Temporary debug logging to help diagnose CORS/connectivity in preview environments.
+    try {
+      // Only log minimal info; do not log sensitive headers.
+      // eslint-disable-next-line no-console
+      console.debug('[api.request] ->', {
+        url,
+        method: (rest && rest.method) || 'GET',
+        origin: typeof window !== 'undefined' ? window.location.origin : 'n/a',
+        hasContentType: headers.has('Content-Type'),
+        accept: headers.get('Accept'),
+      });
+    } catch (_) {}
+
     // Ensure CORS mode for cross-origin requests. Credentials are omitted by default.
     const response = await withTimeout(
       fetch(url, { headers, mode: 'cors', ...rest }),
@@ -125,10 +138,11 @@ export async function request(path, options = {}) {
 
     if (!response.ok) {
       // Build best-effort error message
-      const serverMessage =
+      const parsedMessage =
         parsed && typeof parsed === 'object' && parsed.message
           ? String(parsed.message)
-          : response.statusText || 'Request failed';
+          : null;
+      const serverMessage = parsedMessage || response.statusText || 'Request failed';
 
       throw createError('HTTP_ERROR', serverMessage, response.status, parsed);
     }
@@ -221,7 +235,7 @@ export async function postJson(path, body, options = {}) {
  */
 export async function postMultipart(path, formData, options = {}) {
   const headers = new Headers(options.headers || {});
-  // Ensure we don't manually set Content-Type for multipart
+  // Ensure we don't manually set Content-Type for multipart; the browser will include the boundary automatically.
   if (headers.has('Content-Type')) {
     headers.delete('Content-Type');
   }
@@ -229,10 +243,17 @@ export async function postMultipart(path, formData, options = {}) {
     headers.set('Accept', 'application/json');
   }
 
+  // Guard against accidental non-FormData
+  const body = formData instanceof FormData ? formData : (() => {
+    // eslint-disable-next-line no-console
+    console.warn('[api.postMultipart] Expected FormData body, received:', typeof formData);
+    return formData;
+  })();
+
   return request(path, {
     method: 'POST',
     headers,
-    body: formData,
+    body,
     ...options,
   });
 }
