@@ -6,22 +6,19 @@ import useApi from '../hooks/useApi';
 import { postJson, postMultipart } from '../api/client';
 import { endpoints } from '../api/endpoints';
 import { getJson, setJson, removeItem, storageKeys } from '../utils/storage';
+import { SkeletonBlock, SkeletonText } from '../components/Common/Skeleton';
+import EmptyState from '../components/Common/EmptyState';
+import theme from '../constants/theme';
 
 // PUBLIC_INTERFACE
 export default function ResumeOptimizer() {
   /**
-   * ResumeOptimizer - Orchestrates resume upload and preview of backend analysis.
-   * - Uses ResumeUpload to collect file/text and emits onAnalyze payload
-   * - Calls POST /api/resumes/analyze using multipart for file or JSON for text
-   * - Shows loading/error and renders analysis in ResumePreview
-   * - Provides a local insights view (client-side) when pasted text is available or backend is unavailable.
-   * - Autosaves a local draft (resume text only) with debounce to localStorage.
+   * ResumeOptimizer - Handles resume upload and optimization analysis.
+   * Adds skeleton loaders while analyzing and a friendly empty state when no resume is uploaded.
    */
   const [lastPayload, setLastPayload] = useState(null);
   const [draft, setDraft] = useState(() => {
-    // Load draft once on mount
     const saved = getJson(storageKeys.resumeDraft);
-    // Shape: { resumeText: string }
     if (saved && typeof saved.resumeText === 'string') return saved;
     return { resumeText: '' };
   });
@@ -33,7 +30,6 @@ export default function ResumeOptimizer() {
   // Debounce persistence
   const debounceRef = useRef(null);
   useEffect(() => {
-    // Save only when resumeText changes
     if (!draft) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -58,7 +54,6 @@ export default function ResumeOptimizer() {
     setHasRestorable(false);
   }, []);
 
-  // Request function for useApi; accepts either { formData } or { json }
   const analyzeFn = useCallback(
     async (args = {}, { signal, timeout } = {}) => {
       const { formData, json } = args || {};
@@ -66,7 +61,6 @@ export default function ResumeOptimizer() {
         const { data } = await postMultipart(endpoints.resumesAnalyze(), formData, { signal, timeout });
         return data;
       }
-      // default to JSON path; backend expects { resumeText }
       const body = json || {};
       const { data } = await postJson(endpoints.resumesAnalyze(), body, { signal, timeout });
       return data;
@@ -79,14 +73,11 @@ export default function ResumeOptimizer() {
   const handleAnalyze = useCallback(
     ({ resumeText, file, prepareJson, prepareMultipart }) => {
       setLastPayload({ resumeText: resumeText || null, hasFile: !!file });
-
-      // Update local draft from latest resumeText supplied by child (if any)
       if (typeof resumeText === 'string') {
         setDraft({ resumeText });
         setHasRestorable((resumeText || '').trim().length > 0);
       }
 
-      // Prefer file if provided; otherwise send JSON with resumeText
       if (file && typeof prepareMultipart === 'function') {
         const fd = prepareMultipart();
         if (!fd) return;
@@ -101,19 +92,11 @@ export default function ResumeOptimizer() {
     [request]
   );
 
-  const handleApplySuggestion = useCallback((suggestion) => {
-    // For now, just log; could be used to modify resume text client-side
-    // eslint-disable-next-line no-console
-    console.log('Apply suggestion clicked:', suggestion);
-  }, []);
-
   const composedError = useMemo(() => {
     if (!error) return null;
-    // Provide friendlier message for CORS/network errors
     if (error.code === 'NETWORK_ERROR') {
       return `${error.message}. Please verify the backend is reachable at the configured API base URL and CORS is enabled.`;
     }
-    // If HTTP error, include status when available
     if (error.code === 'HTTP_ERROR') {
       const statusPart = typeof error.status === 'number' ? ` (HTTP ${error.status})` : '';
       return `${error.message}${statusPart}`;
@@ -121,18 +104,13 @@ export default function ResumeOptimizer() {
     return error.message || 'An error occurred.';
   }, [error]);
 
-  // When we have pasted text and either: (a) backend hasn't returned data yet, or (b) there was an error,
-  // we still want to show local insights. We'll pass localText and localKeywords to ResumePreview.
   const localText = useMemo(() => {
-    // Prefer the current draft text if available and there is no file in lastPayload
     if (draft && typeof draft.resumeText === 'string' && draft.resumeText.trim().length > 0) {
       return draft.resumeText;
     }
-    // Only use pasted text when last payload indicates it (no file) and we have a string
     if (lastPayload && !lastPayload.hasFile && typeof lastPayload.resumeText === 'string') {
       return lastPayload.resumeText;
     }
-    // If there was a network error and lastPayload.resumeText exists, still show local insights
     if (composedError && lastPayload && typeof lastPayload.resumeText === 'string') {
       return lastPayload.resumeText;
     }
@@ -140,11 +118,11 @@ export default function ResumeOptimizer() {
   }, [draft, lastPayload, composedError]);
 
   const localKeywords = useMemo(() => {
-    // Prefer backend-provided keywords if available; else fallback to a small default set for highlighting
     if (data && Array.isArray(data.keywords) && data.keywords.length > 0) return data.keywords;
-    // Fallback defaults to keep UX helpful
     return ['experience', 'project', 'react', 'typescript', 'python', 'lead', 'optimize'];
   }, [data]);
+
+  const hasAnyResume = (draft?.resumeText || '').trim().length > 0 || !!(lastPayload && (lastPayload.hasFile || (lastPayload.resumeText || '').trim().length > 0));
 
   return (
     <Container as="section" role="region" ariaLabel="Resume Optimizer">
@@ -184,12 +162,14 @@ export default function ResumeOptimizer() {
           </div>
         </div>
 
+        {/* Layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
             <ResumeUpload onAnalyze={handleAnalyze} />
             {isLoading && (
               <div role="status" aria-live="polite" className="card" style={{ marginTop: 12 }}>
-                Analyzing resume…
+                <SkeletonBlock height={18} style={{ width: '45%', marginBottom: 8 }} />
+                <SkeletonText lines={2} />
               </div>
             )}
             {composedError && (
@@ -214,12 +194,39 @@ export default function ResumeOptimizer() {
             )}
           </div>
           <div>
-            <ResumePreview
-              data={data}
-              onApplySuggestion={handleApplySuggestion}
-              localText={localText}
-              localKeywords={localKeywords}
-            />
+            {!hasAnyResume && !isLoading ? (
+              <EmptyState
+                title="No resume uploaded"
+                description="Upload your resume to receive ATS optimization suggestions and see a formatted preview."
+                primaryActionText="Upload Resume"
+                onPrimaryAction={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                secondaryActionText="Learn how it works"
+                onSecondaryAction={() => { window.location.href = '/settings'; }}
+                icon={
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill={theme.colors.primary} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M5 20h14v-2H5m14-9h-4V3H9v6H5l7 7 7-7z" />
+                  </svg>
+                }
+              />
+            ) : (
+              <div>
+                {isLoading ? (
+                  <div role="status" aria-live="polite" aria-label="Loading preview">
+                    <SkeletonBlock height={320} />
+                    <div style={{ marginTop: 12 }}>
+                      <SkeletonText lines={4} />
+                    </div>
+                  </div>
+                ) : (
+                  <ResumePreview
+                    data={data}
+                    onApplySuggestion={() => {}}
+                    localText={localText}
+                    localKeywords={localKeywords}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

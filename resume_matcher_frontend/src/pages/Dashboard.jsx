@@ -1,62 +1,78 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Container from '../components/Layout/Container';
+import { SkeletonBlock, SkeletonText } from '../components/Common/Skeleton';
+import EmptyState from '../components/Common/EmptyState';
+import theme from '../constants/theme';
 
 // PUBLIC_INTERFACE
 export default function Dashboard() {
   /**
-   * Dashboard - High-level overview with quick actions and recent items (placeholders only).
-   * - Quick Actions: buttons to navigate to Resume Optimizer and Job Matcher
-   * - Recent Items: placeholder lists for recent resumes and matches
-   * - No API calls; to be wired later
+   * Dashboard - Overview page that shows loading skeletons while fetching,
+   * and a friendly empty state when there is no data.
    */
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState(null);
+
+  // Simulate async fetch; replace with real API call
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    const t = setTimeout(() => {
+      if (!mounted) return;
+      // Start with no data to showcase empty state UX
+      setStats(null);
+      setLoading(false);
+    }, 700);
+    return () => {
+      mounted = false;
+      clearTimeout(t);
+    };
+  }, []);
+
   return (
     <Container as="section" role="region" ariaLabel="Dashboard overview">
-      <div className="panel" aria-label="Quick actions">
-        <header style={{ marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>Quick Actions</h2>
-          <p className="description">Jump right into optimizing your resume or finding matching jobs.</p>
-        </header>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <a href="/resume" className="btn btn-primary" aria-label="Go to Resume Optimizer">
-            Optimize Resume
-          </a>
-          <a href="/match" className="btn btn-outline" aria-label="Go to Job Matcher">
-            Find Job Matches
-          </a>
-        </div>
-      </div>
-
-      <div className="panel" aria-label="Recent activity">
-        <header style={{ marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>Recent Activity</h3>
-          <p className="description">Your latest uploads and matches will appear here.</p>
-        </header>
-
-        <div
-          className="card"
-          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}
-          role="list"
-          aria-label="Recent items"
-        >
-          <div role="listitem" className="card">
-            <h4 style={{ marginTop: 0 }}>Recent Resumes</h4>
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              <li>John Doe - Software Engineer (placeholder)</li>
-              <li>Jane Smith - Data Analyst (placeholder)</li>
-              <li>Product Manager - General (placeholder)</li>
-            </ul>
+      {loading ? (
+        <div role="status" aria-live="polite" aria-label="Loading dashboard content">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
+            <SkeletonBlock height={92} />
+            <SkeletonBlock height={92} />
+            <SkeletonBlock height={92} />
           </div>
-
-          <div role="listitem" className="card">
-            <h4 style={{ marginTop: 0 }}>Recent Matches</h4>
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              <li>Senior Frontend Engineer - 78% match (placeholder)</li>
-              <li>Data Scientist - 66% match (placeholder)</li>
-              <li>Project Manager - 54% match (placeholder)</li>
-            </ul>
-          </div>
+          <SkeletonText lines={3} width="100%" />
         </div>
-      </div>
+      ) : !stats ? (
+        <EmptyState
+          title="Get started on your journey"
+          description="Upload a resume to see optimization tips, track improvements, and match with relevant jobs."
+          primaryActionText="Upload Resume"
+          onPrimaryAction={() => { window.location.href = '/resume-optimizer'; }}
+          secondaryActionText="Find Jobs"
+          onSecondaryAction={() => { window.location.href = '/job-matcher'; }}
+          icon={
+            <svg width="28" height="28" viewBox="0 0 24 24" fill={theme.colors.primary} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2ZM13 9V3.5L18.5 9H13Z" />
+            </svg>
+          }
+        />
+      ) : (
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
+            <div className="panel">
+              <div style={{ color: 'var(--color-text-muted)', fontSize: 12, fontWeight: 600 }}>Resumes</div>
+              <div style={{ color: 'var(--color-text)', fontSize: 28, fontWeight: 700 }}>{stats.resumes}</div>
+            </div>
+            <div className="panel">
+              <div style={{ color: 'var(--color-text-muted)', fontSize: 12, fontWeight: 600 }}>Matches</div>
+              <div style={{ color: 'var(--color-text)', fontSize: 28, fontWeight: 700 }}>{stats.matches}</div>
+            </div>
+            <div className="panel">
+              <div style={{ color: 'var(--color-text-muted)', fontSize: 12, fontWeight: 600 }}>Suggestions</div>
+              <div style={{ color: 'var(--color-text)', fontSize: 28, fontWeight: 700 }}>{stats.suggestions}</div>
+            </div>
+          </div>
+          <p>Welcome back! Explore your matches and refine your resume.</p>
+        </div>
+      )}
     </Container>
   );
 }

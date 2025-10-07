@@ -8,15 +8,15 @@ import useApi from '../hooks/useApi';
 import { postJson } from '../api/client';
 import { endpoints } from '../api/endpoints';
 import { getJson, setJson, removeItem, storageKeys } from '../utils/storage';
+import { SkeletonBlock, SkeletonText } from '../components/Common/Skeleton';
+import EmptyState from '../components/Common/EmptyState';
+import theme from '../constants/theme';
 
 // PUBLIC_INTERFACE
 export default function JobMatcher() {
   /**
-   * JobMatcher - Flow for entering a job description, showing suggestions, and viewing match results.
-   * - Uses JobDescriptionInput to accept description and emit onMatch/onSuggest
-   * - Calls POST /api/jobs/suggest and POST /api/jobs/match via api/client
-   * - Displays loading/error states and renders results
-   * - Autosaves a local job draft (title/company/description) with debounce to localStorage.
+   * JobMatcher - Enter a job description to generate suggestions and evaluate match.
+   * Adds skeleton loaders while loading and friendly empty state when no suggestions yet.
    */
 
   // State for modal suggestion details
@@ -26,7 +26,6 @@ export default function JobMatcher() {
   // Local job draft state
   const [jobDraft, setJobDraft] = useState(() => {
     const saved = getJson(storageKeys.jobDraft);
-    // Shape: { jobTitle?: string, company?: string, jobDescription?: string }
     if (saved && typeof saved === 'object') {
       return {
         jobTitle: String(saved.jobTitle || ''),
@@ -88,7 +87,6 @@ export default function JobMatcher() {
   // Suggest jobs API
   const suggestFn = useCallback(
     async (payload = {}, { signal, timeout } = {}) => {
-      // Backend expects: { resumeText, query, page }
       const { data } = await postJson(endpoints.jobsSuggest(), payload, { signal, timeout });
       return data;
     },
@@ -104,7 +102,6 @@ export default function JobMatcher() {
   // Match job API
   const matchFn = useCallback(
     async (payload = {}, { signal, timeout } = {}) => {
-      // Backend expects: { resumeText, jobDescription }
       const { data } = await postJson(endpoints.jobsMatch(), payload, { signal, timeout });
       return data;
     },
@@ -119,7 +116,6 @@ export default function JobMatcher() {
 
   const onSuggest = useCallback(
     (payload) => {
-      // payload: { resumeText?, query, page? }
       requestSuggest(payload, { timeout: 25000 });
     },
     [requestSuggest]
@@ -127,7 +123,6 @@ export default function JobMatcher() {
 
   const onMatch = useCallback(
     (payload) => {
-      // payload: { resumeText?, jobDescription }
       requestMatch(payload, { timeout: 30000 });
     },
     [requestMatch]
@@ -157,7 +152,6 @@ export default function JobMatcher() {
 
   // Normalize backend responses into shapes expected by presentational components
   const suggestions = useMemo(() => {
-    // Expecting an array like [{ id,title,company,location,summary,matchScore,postedAt,url }]
     if (!suggestData) return [];
     if (Array.isArray(suggestData)) return suggestData;
     if (Array.isArray(suggestData?.items)) return suggestData.items;
@@ -165,7 +159,6 @@ export default function JobMatcher() {
   }, [suggestData]);
 
   const matchScore = useMemo(() => {
-    // Expecting e.g., { matchScore, highlights, improvements }
     if (!matchData) return null;
     return typeof matchData.matchScore === 'number' ? matchData.matchScore : null;
   }, [matchData]);
@@ -180,7 +173,6 @@ export default function JobMatcher() {
     return Array.isArray(arr) ? arr : [];
   }, [matchData]);
 
-  // Friendly error messages for CORS/network issues
   const friendlySuggestError = useMemo(() => {
     if (!suggestError) return null;
     if (suggestError.code === 'NETWORK_ERROR') {
@@ -246,17 +238,13 @@ export default function JobMatcher() {
         <div style={{ display: 'grid', gap: 16 }}>
           <JobDescriptionInput
             onMatch={(payload) => {
-              // Update local draft with latest fields inferred from payload/jobDescription text
               if (payload && typeof payload.jobDescription === 'string') {
                 setJobDraft((prev) => ({ ...prev, jobDescription: payload.jobDescription }));
                 setHasRestorable(true);
               }
-              // Best-effort: jobTitle/company are not in payload built in child for match, but keep previous.
               onMatch(payload);
             }}
             onSuggest={(payload) => {
-              // Suggestions are built from jobTitle/company/description; try to persist what's derivable
-              // The payload contains query, not raw fields; keep existing draft.
               onSuggest(payload);
             }}
             isLoading={isSuggesting || isMatching}
@@ -279,35 +267,69 @@ export default function JobMatcher() {
           />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <JobSuggestions
-              suggestions={suggestions}
-              onSelect={handleSelectJob}
-              heading={suggestionHeading}
-              isLoading={isSuggesting}
-              error={friendlySuggestError}
-            />
             <div>
-              {isMatching && (
-                <div role="status" aria-live="polite" className="card" style={{ marginBottom: 12 }}>
-                  Matching…
+              {isSuggesting ? (
+                <div role="status" aria-live="polite" aria-label="Loading job suggestions">
+                  <SkeletonBlock height={220} />
+                  <div style={{ marginTop: 12 }}>
+                    <SkeletonText lines={4} />
+                  </div>
                 </div>
+              ) : suggestions.length === 0 ? (
+                <EmptyState
+                  title="No job matches yet"
+                  description="Paste or describe a job to generate tailored suggestions and matching insights."
+                  primaryActionText="Describe a job"
+                  onPrimaryAction={() => {
+                    const el = document.querySelector('textarea, input');
+                    if (el) el.focus();
+                  }}
+                  secondaryActionText="Explore resume tips"
+                  onSecondaryAction={() => { window.location.href = '/resume-optimizer'; }}
+                  icon={
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill={theme.colors.primary} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                      <path d="M9 21h6v-1a4 4 0 0 0-6 0v1zm3-19a5 5 0 0 0-5 5c0 2.76 2.24 5 5 5s5-2.24 5-5a5 5 0 0 0-5-5zM4 8a8 8 0 1 1 16 0 8 8 0 0 1-16 0z" />
+                    </svg>
+                  }
+                />
+              ) : (
+                <JobSuggestions
+                  suggestions={suggestions}
+                  onSelect={handleSelectJob}
+                  heading="Suggested Jobs"
+                  isLoading={isSuggesting}
+                  error={friendlySuggestError}
+                />
               )}
-              {friendlyMatchError && (
-                <div
-                  role="alert"
-                  aria-live="assertive"
-                  className="card"
-                  style={{ color: 'var(--color-error)', marginBottom: 12, fontWeight: 600 }}
-                >
-                  {friendlyMatchError}
+            </div>
+            <div>
+              {isMatching ? (
+                <div role="status" aria-live="polite" aria-label="Matching score loading">
+                  <SkeletonBlock height={180} />
+                  <div style={{ marginTop: 12 }}>
+                    <SkeletonText lines={3} />
+                  </div>
                 </div>
+              ) : (
+                <>
+                  {friendlyMatchError && (
+                    <div
+                      role="alert"
+                      aria-live="assertive"
+                      className="card"
+                      style={{ color: 'var(--color-error)', marginBottom: 12, fontWeight: 600 }}
+                    >
+                      {friendlyMatchError}
+                    </div>
+                  )}
+                  <MatchResults
+                    matchScore={matchScore}
+                    highlights={highlights}
+                    improvements={improvements}
+                    onApplySuggestion={handleApplySuggestion}
+                  />
+                </>
               )}
-              <MatchResults
-                matchScore={matchScore}
-                highlights={highlights}
-                improvements={improvements}
-                onApplySuggestion={handleApplySuggestion}
-              />
             </div>
           </div>
         </div>
