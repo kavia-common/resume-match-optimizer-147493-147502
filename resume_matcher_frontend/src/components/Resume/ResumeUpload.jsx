@@ -86,8 +86,8 @@ export default function ResumeUpload({ onAnalyze, maxFileSize = 5 * 1024 * 1024 
   // Prepare payload helpers using api/client.js but do not invoke yet
   const prepareMultipart = useCallback(() => {
     if (!file) return null;
-    // Place under 'resume' key to align with existing code expectations
-    return buildFormData(file, 'resume');
+    // Place under 'file' key to align with backend expectation for multipart
+    return buildFormData(file, 'file');
   }, [file]);
 
   const prepareJson = useCallback(() => {

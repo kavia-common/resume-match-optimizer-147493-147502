@@ -4,92 +4,82 @@ import JobDescriptionInput from '../components/Jobs/JobDescriptionInput';
 import JobSuggestions from '../components/Jobs/JobSuggestions';
 import MatchResults from '../components/Matching/MatchResults';
 import SuggestionModal from '../components/Matching/SuggestionModal';
+import useApi from '../hooks/useApi';
+import { postJson } from '../api/client';
+import { endpoints } from '../api/endpoints';
 
 // PUBLIC_INTERFACE
 export default function JobMatcher() {
   /**
    * JobMatcher - Flow for entering a job description, showing suggestions, and viewing match results.
    * - Uses JobDescriptionInput to accept description and emit onMatch/onSuggest
-   * - Displays JobSuggestions list with placeholder data
-   * - Shows MatchResults with placeholder score/details
-   * - Provides SuggestionModal placeholder for actionable improvements
-   * - No API calls; all data is local/mock until wired in later step
+   * - Calls POST /api/jobs/suggest and POST /api/jobs/match via api/client
+   * - Displays loading/error states and renders results
    */
 
-  // Local state placeholders
-  const [suggestions, setSuggestions] = useState([]);
-  const [match, setMatch] = useState({ score: null, highlights: [], improvements: [] });
+  // State for modal suggestion details
   const [modalOpen, setModalOpen] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(null);
 
-  const onSuggest = useCallback((payload) => {
-    // Placeholder: generate simple mock suggestions using the query or title
-    const basis = payload?.query || 'Software Engineer';
-    const mock = [
-      {
-        id: 'j1',
-        title: `${basis} I`,
-        company: 'Acme Corp',
-        location: 'Remote',
-        summary: 'Work on modern web apps using React and Node.',
-        matchScore: 62,
-        postedAt: '2025-01-10',
-        url: '#',
-      },
-      {
-        id: 'j2',
-        title: `${basis} II`,
-        company: 'Globex',
-        location: 'San Francisco, CA',
-        summary: 'Collaborate with cross-functional teams to build scalable platforms.',
-        matchScore: 74,
-        postedAt: '2025-01-08',
-        url: '#',
-      },
-      {
-        id: 'j3',
-        title: `${basis} III`,
-        company: 'Initech',
-        location: 'New York, NY',
-        summary: 'Lead frontend architecture and mentor junior engineers.',
-        matchScore: 81,
-        postedAt: '2025-01-05',
-        url: '#',
-      },
-    ];
-    setSuggestions(mock);
-  }, []);
+  // Suggest jobs API
+  const suggestFn = useCallback(
+    async (payload = {}, { signal, timeout } = {}) => {
+      // Backend expects: { resumeText, query, page }
+      const { data } = await postJson(endpoints.jobsSuggest(), payload, { signal, timeout });
+      return data;
+    },
+    []
+  );
+  const {
+    isLoading: isSuggesting,
+    error: suggestError,
+    data: suggestData,
+    request: requestSuggest,
+  } = useApi(suggestFn);
 
-  const onMatch = useCallback((payload) => {
-    // Placeholder: compute a fake score and details from job description length and presence of resumeText
-    const descLen = payload?.jobDescription?.length || 0;
-    const base = Math.min(100, Math.max(30, Math.round(descLen / 5)));
-    const extra = payload?.resumeText ? 10 : 0;
-    const score = Math.min(100, base + extra);
+  // Match job API
+  const matchFn = useCallback(
+    async (payload = {}, { signal, timeout } = {}) => {
+      // Backend expects: { resumeText, jobDescription }
+      const { data } = await postJson(endpoints.jobsMatch(), payload, { signal, timeout });
+      return data;
+    },
+    []
+  );
+  const {
+    isLoading: isMatching,
+    error: matchError,
+    data: matchData,
+    request: requestMatch,
+  } = useApi(matchFn);
 
-    setMatch({
-      score,
-      highlights: ['Strong alignment with required skills (placeholder)', 'Relevant experience detected (placeholder)'],
-      improvements: [
-        { id: 'imp-1', title: 'Add more project outcomes', detail: 'Provide metrics such as % improvement, revenue impact.' },
-        { id: 'imp-2', title: 'Customize summary', detail: 'Tailor your headline to this role and company.' },
-      ],
-    });
-  }, []);
+  const onSuggest = useCallback(
+    (payload) => {
+      // payload: { resumeText?, query, page? }
+      requestSuggest(payload, { timeout: 25000 });
+    },
+    [requestSuggest]
+  );
+
+  const onMatch = useCallback(
+    (payload) => {
+      // payload: { resumeText?, jobDescription }
+      requestMatch(payload, { timeout: 30000 });
+    },
+    [requestMatch]
+  );
 
   const handleSelectJob = useCallback((job) => {
-    // Placeholder: open modal with a suggestion to tailor resume for selected job
     setActiveSuggestion({
       id: `apply-${job?.id || 'x'}`,
       title: `Tailor resume for ${job?.title || 'selected job'}`,
       detail:
-        'Emphasize experience that aligns with the job description, focusing on key skills and outcomes. (placeholder)',
+        'Emphasize experience that aligns with the job description, focusing on key skills and outcomes.',
     });
     setModalOpen(true);
   }, []);
 
   const handleApplySuggestion = useCallback((imp) => {
-    // Placeholder: surface modal with selected improvement
     setActiveSuggestion(imp);
     setModalOpen(true);
   }, []);
@@ -100,6 +90,48 @@ export default function JobMatcher() {
   }, []);
 
   const suggestionHeading = useMemo(() => 'Suggested Jobs', []);
+
+  // Normalize backend responses into shapes expected by presentational components
+  const suggestions = useMemo(() => {
+    // Expecting an array like [{ id,title,company,location,summary,matchScore,postedAt,url }]
+    if (!suggestData) return [];
+    if (Array.isArray(suggestData)) return suggestData;
+    if (Array.isArray(suggestData?.items)) return suggestData.items;
+    return [];
+  }, [suggestData]);
+
+  const matchScore = useMemo(() => {
+    // Expecting e.g., { matchScore, highlights, improvements }
+    if (!matchData) return null;
+    return typeof matchData.matchScore === 'number' ? matchData.matchScore : null;
+  }, [matchData]);
+
+  const highlights = useMemo(() => {
+    const arr = matchData?.highlights;
+    return Array.isArray(arr) ? arr : [];
+  }, [matchData]);
+
+  const improvements = useMemo(() => {
+    const arr = matchData?.improvements;
+    return Array.isArray(arr) ? arr : [];
+  }, [matchData]);
+
+  // Friendly error messages for CORS/network issues
+  const friendlySuggestError = useMemo(() => {
+    if (!suggestError) return null;
+    if (suggestError.code === 'NETWORK_ERROR') {
+      return `${suggestError.message}. Check API base URL and CORS settings.`;
+    }
+    return suggestError.message || 'Failed to fetch suggestions.';
+  }, [suggestError]);
+
+  const friendlyMatchError = useMemo(() => {
+    if (!matchError) return null;
+    if (matchError.code === 'NETWORK_ERROR') {
+      return `${matchError.message}. Check API base URL and CORS settings.`;
+    }
+    return matchError.message || 'Failed to fetch match results.';
+  }, [matchError]);
 
   return (
     <Container as="section" role="region" ariaLabel="Job Matcher">
@@ -112,20 +144,44 @@ export default function JobMatcher() {
         </header>
 
         <div style={{ display: 'grid', gap: 16 }}>
-          <JobDescriptionInput onMatch={onMatch} onSuggest={onSuggest} />
+          <JobDescriptionInput
+            onMatch={onMatch}
+            onSuggest={onSuggest}
+            isLoading={isSuggesting || isMatching}
+            error={friendlySuggestError || friendlyMatchError}
+          />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <JobSuggestions
               suggestions={suggestions}
               onSelect={handleSelectJob}
               heading={suggestionHeading}
+              isLoading={isSuggesting}
+              error={friendlySuggestError}
             />
-            <MatchResults
-              matchScore={match.score}
-              highlights={match.highlights}
-              improvements={match.improvements}
-              onApplySuggestion={handleApplySuggestion}
-            />
+            <div>
+              {isMatching && (
+                <div role="status" aria-live="polite" className="card" style={{ marginBottom: 12 }}>
+                  Matching…
+                </div>
+              )}
+              {friendlyMatchError && (
+                <div
+                  role="alert"
+                  aria-live="assertive"
+                  className="card"
+                  style={{ color: 'var(--color-error)', marginBottom: 12, fontWeight: 600 }}
+                >
+                  {friendlyMatchError}
+                </div>
+              )}
+              <MatchResults
+                matchScore={matchScore}
+                highlights={highlights}
+                improvements={improvements}
+                onApplySuggestion={handleApplySuggestion}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -136,7 +192,6 @@ export default function JobMatcher() {
         suggestion={activeSuggestion}
         onClose={closeModal}
         onApplySuggestion={() => {
-          // Placeholder: simulate applying suggestion
           closeModal();
         }}
       />
