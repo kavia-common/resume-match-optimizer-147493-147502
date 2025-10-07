@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import App from './App';
+import AppShell from './AppShell';
 
 // Mock the API client so no real network calls are made.
 // We'll control postJson and postMultipart to resolve predictable payloads.
@@ -25,11 +25,11 @@ jest.mock('./api/client', () => {
   };
 });
 
-// Utility to render App with a starting route without depending on window._CONFIG
+// Utility to render AppShell with a starting route without depending on window._CONFIG
 function renderWithRoute(initialRoute = '/') {
   return render(
     <MemoryRouter initialEntries={[initialRoute]}>
-      <App />
+      <AppShell />
     </MemoryRouter>
   );
 }
@@ -88,10 +88,7 @@ describe('useApi smoke flow with mocked api/client', () => {
       headers: {},
     });
 
-    // Minimal test component leveraging useApi semantics through existing page
-    // We'll mount the ResumeOptimizer page route and simulate a simple JSON analyze call path.
-    // The page uses a button "Analyze" in ResumeUpload; to keep this test fast,
-    // we trigger a minimal request via a small inline component that calls useApi directly.
+    // Minimal test component leveraging useApi semantics without Router dependency
     const TestUseApiComponent = () => {
       // inline require to avoid breaking jest hoists
       const useApi = require('./hooks/useApi').default;
@@ -112,11 +109,7 @@ describe('useApi smoke flow with mocked api/client', () => {
       );
     };
 
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <TestUseApiComponent />
-      </MemoryRouter>
-    );
+    render(<TestUseApiComponent />);
 
     // Start request
     fireEvent.click(screen.getByRole('button', { name: /run api/i }));
