@@ -9,8 +9,21 @@ export default function Settings() {
    * - Displays resolved API base URL using runtime config
    * - Includes clear instructions to configure public/config.js
    * - Does not persist or call APIs yet
+   *
+   * Note: When displaying runtime config objects, never render the object directly
+   * as JSX children (e.g., {window._CONFIG}). Use strings or JSON.stringify inside <pre>.
    */
   const apiBase = useMemo(() => getApiBaseUrl(), []);
+  const rawConfigJson = useMemo(() => {
+    try {
+      // Safely stringify for display
+      // eslint-disable-next-line no-underscore-dangle
+      const obj = typeof window !== 'undefined' && window._CONFIG ? window._CONFIG : {};
+      return JSON.stringify(obj, null, 2);
+    } catch {
+      return '{}';
+    }
+  }, []);
 
   return (
     <Container as="section" role="region" ariaLabel="Settings">
@@ -29,12 +42,30 @@ export default function Settings() {
             </div>
 
             <div>
+              <div style={{ color: 'var(--color-text-muted)' }}>Current raw runtime config (window._CONFIG)</div>
+              <div
+                className="card"
+                style={{
+                  marginTop: 8,
+                  padding: 12,
+                  background: '#fff',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                }}
+              >
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                  <code>{rawConfigJson}</code>
+                </pre>
+              </div>
+            </div>
+
+            <div>
               <div style={{ color: 'var(--color-text-muted)' }}>How to change API Base URL</div>
               <div className="card" style={{ marginTop: 8 }}>
                 <ol style={{ margin: 0, paddingLeft: 18 }}>
                   <li>Open the file: <code>public/config.js</code></li>
                   <li>Set <code>window._CONFIG.API_BASE_URL</code> to your backend URL (no trailing slash)</li>
-                  <li>Example: <code>window._CONFIG = {{ API_BASE_URL: 'http://localhost:8000' }}</code></li>
+                  <li>Example: <code>{String("window._CONFIG = { API_BASE_URL: 'http://localhost:8000' }")}</code></li>
                   <li>Reload the app to apply changes</li>
                 </ol>
                 <p className="description" style={{ marginTop: 8 }}>
